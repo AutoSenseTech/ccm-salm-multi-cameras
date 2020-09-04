@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<launch>
+
+<arg name="dist" default="0"/>
+<arg name="cam" default="$(find ccmslam)/conf/mynteye_s_stereo_old.yaml"/>
+
+  <group ns="ccmslam">
+
+  <node pkg="tf" type="static_transform_publisher" name="linkC0_broadcaster" args="-100 300 5 -1.571 0 -2 world odomC0 100" /> 
+
+<node pkg="ccmslam" type="ccmslamClientNode" name="ccmslamClientNode1" args="$(find ccmslam)/conf/ORBvoc.txt $(arg cam) /mynteye1/left/image_raw /mynteye1/right/image_raw /mynteye1/depth/image_raw" output="screen" >
+
+  <!-- /cam0/image_raw /cam1/image_raw ++++/left_rect /right_rect+++++mynteye_s_stereo.yaml++++ EuRoC.yaml++++++++++++++++++++++++++ -->
+  <!-- Agent Specific Params - !!!MUST BE ADJUSTED!!! -->  
+
+  <param name="~FrameId" type="string" value="odomC1" />
+  <param name="~ClientId" type="int" value="1" />
+
+  <param name="~TopicNameCamSub" type="string" value="" />
+<!--hxy 增加一个topic -->
+<param name="~TopicNameCamSub2" type="string" value="" />
+
+  <param name="~MapInTopicName" type="string" value="MapOutServer1" unless="$(arg dist)" />
+  <param name="~MapInTopicName" type="string" value="MapOutServer1Disturbed" if="$(arg dist)" /> 
+
+</node>
+
+  </group>
+</launch>

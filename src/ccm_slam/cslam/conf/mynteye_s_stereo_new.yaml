@@ -1,0 +1,134 @@
+%YAML:1.0
+
+#--------------------------------------------------------------------------------------------
+# Camera Parameters. Adjust them!
+#这里新的小觅相机的双目参数  这个相机有保险结
+#--------------------------------------------------------------------------------------------
+# Camera calibration and distortion parameters (OpenCV) 
+Camera.fx: 365.7029495822975
+Camera.fy: 365.7029495822975
+Camera.cx: 370.1231346130371
+Camera.cy: 253.3439064025879
+
+Camera.k1: 0.0
+Camera.k2: 0.0
+Camera.p1: 0.0
+Camera.p2: 0.0
+
+Camera.width: 752
+Camera.height: 480
+
+# Camera frames per second 
+Camera.fps: 30.0
+
+# stereo baseline times fx
+Camera.bf: 43.90417869623662
+
+# Color order of the images (0: BGR, 1: RGB. It is ignored if images are grayscale)
+Camera.RGB: 1
+
+# Close/Far threshold. Baseline times.
+ThDepth: 35
+
+#--------------------------------------------------------------------------------------------
+# Stereo Rectification. Only if you need to pre-rectify the images.
+# Camera.fx, .fy, etc must be the same as in LEFT.P
+#--------------------------------------------------------------------------------------------
+
+LEFT.height: 480
+LEFT.width: 752
+LEFT.D: !!opencv-matrix
+   rows: 1
+   cols: 5
+   dt: d
+   data: [-0.29338484787556485, 0.07202977152703853, -0.0008193135202634559,-0.00047508681452432266, 0.00000]
+LEFT.K: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [364.6870382743934, 0,  387.76945070261644,0, 365.19392493294606, 247.17437876247078,0, 0, 1]
+LEFT.R:  !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [0.999934211739315, 0.0009191125151429425, 0.01143360946767578,-0.000929549431718277, 0.9999991561477322, 0.0009075470663486402,-0.01143276568153175, -0.0009181154655887695, 0.9999342223030787]
+LEFT.P:  !!opencv-matrix
+   rows: 3
+   cols: 4
+   dt: d
+   data: [365.7029495822975, 0, 370.1231346130371, 0,0, 365.7029495822975, 253.3439064025879, 0,0, 0, 1, 0]
+
+RIGHT.height: 480
+RIGHT.width: 752
+RIGHT.D: !!opencv-matrix
+   rows: 1
+   cols: 5
+   dt: d
+   data: [-0.31911893174442646, 0.09851257869430688, -0.0003320823085325425,-0.00025912008892458184, 0.00000]
+RIGHT.K: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [366.1840564547567, 0,370.0020464457557,0, 366.2119742316489, 253.54005726788264,0, 0, 1]
+RIGHT.R:  !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [0.9999666158356227, 0.00676949070040302, 0.004576156674439828,-0.006765451614784237, 0.9999767112704334, -0.0008975417630057679,-0.004582126002182486, 0.0008665520327614743, 0.9999891265453212]
+RIGHT.P:  !!opencv-matrix
+   rows: 3
+   cols: 4
+   dt: d
+   data: [365.7029495822975, 0, 370.1231346130371, -43.90417869623662,0, 365.7029495822975, 253.3439064025879, 0,0, 0, 1, 0]
+
+#--------------------------------------------------------------------------------------------
+# ORB Parameters
+#--------------------------------------------------------------------------------------------
+
+# ORB Extractor: Number of features per image
+ORBextractor.nFeatures: 1200
+
+# ORB Extractor: Scale factor between levels in the scale pyramid 	
+ORBextractor.scaleFactor: 1.2
+
+# ORB Extractor: Number of levels in the scale pyramid	
+ORBextractor.nLevels: 8
+
+# ORB Extractor: Fast threshold
+# Image is divided in a grid. At each cell FAST are extracted imposing a minimum response.
+# Firstly we impose iniThFAST. If no corners are detected we impose a lower value minThFAST
+# You can lower these values if your images have low contrast			
+ORBextractor.iniThFAST: 20
+ORBextractor.minThFAST: 7
+
+#--------------------------------------------------------------------------------------------
+# Viewer Parameters
+#--------------------------------------------------------------------------------------------
+Viewer.KeyFrameSize: 0.05
+Viewer.KeyFrameLineWidth: 1
+Viewer.GraphLineWidth: 0.9
+Viewer.PointSize:2
+Viewer.CameraSize: 0.08
+Viewer.CameraLineWidth: 3
+Viewer.ViewpointX: 0
+Viewer.ViewpointY: -0.7
+Viewer.ViewpointZ: -1.8
+Viewer.ViewpointF: 500
+
+#T_SC
+Cam0.T00: 0.0148655429818
+Cam0.T01: -0.999880929698
+Cam0.T02: 0.00414029679422
+Cam0.T03: -0.0216401454975
+Cam0.T10: 0.999557249008
+Cam0.T11: 0.0149672133247
+Cam0.T12: 0.025715529948
+Cam0.T13: -0.064676986768
+Cam0.T20: -0.0257744366974
+Cam0.T21: 0.00375618835797
+Cam0.T22: 0.999660727178
+Cam0.T23: 0.00981073058949
+Cam0.T30: 0.0
+Cam0.T31: 0.0
+Cam0.T32: 0.0
+Cam0.T33: 1.0
