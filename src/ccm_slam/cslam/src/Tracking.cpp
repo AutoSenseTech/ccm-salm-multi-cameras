@@ -1034,7 +1034,7 @@ void Tracking::Track()
     // Store frame pose information to retrieve the complete camera trajectory afterwards.
     if(!mCurrentFrame->mTcw.empty())
     {
-        cv::Mat Tcr = mCurrentFrame->mTcw*mCurrentFrame->mpReferenceBKFs->mvpKeyFrames[0]->GetPoseInverse();
+        cv::Mat Tcr = mCurrentFrame->mTcw*mCurrentFrame->mpReferenceBKFs->GetPoseInverse();
         mlRelativeFramePoses.push_back(Tcr);
         mlpReferencesBKFs.push_back(mpReferenceBKFs);
         mlFrameTimes.push_back(mCurrentFrame->mTimeStamp);
@@ -1066,27 +1066,27 @@ void Tracking::MultiCameraInitialization()
     {
         mCurrentFrame->SetPose(cv::Mat::eye(4,4,CV_32F));
 
-        vector<kfptr> tvKeyFrames;
-        tvKeyFrames.reserve(cameraNum);
+        // vector<kfptr> tvKeyFrames;
+        // tvKeyFrames.reserve(cameraNum);
 
-        //create keyframe which is subbundledkeyframe
-        int frameId = -1;
-        for(int i = 0; i < cameraNum; i++)
-        {
-            if(i == 0)
-            {
-                kfptr pKFini{new KeyFrame(*mCurrentFrame,frameId, i, eSystemState::CLIENT,-1)};
-                frameId = pKFini->mId.first;
-                tvKeyFrames.push_back(pKFini);
-            }
-            else
-            {
-                kfptr pKFini{new KeyFrame(*mCurrentFrame,frameId, i, eSystemState::CLIENT,-1)};
-                tvKeyFrames.push_back(pKFini);
-            }
-        }
+        // //create keyframe which is subbundledkeyframe
+        // int frameId = -1;
+        // for(int i = 0; i < cameraNum; i++)
+        // {
+        //     if(i == 0)
+        //     {
+        //         kfptr pKFini{new KeyFrame(*mCurrentFrame,frameId, i, eSystemState::CLIENT,-1)};
+        //         frameId = pKFini->mId.first;
+        //         tvKeyFrames.push_back(pKFini);
+        //     }
+        //     else
+        //     {
+        //         kfptr pKFini{new KeyFrame(*mCurrentFrame,frameId, i, eSystemState::CLIENT,-1)};
+        //         tvKeyFrames.push_back(pKFini);
+        //     }
+        // }
         
-        bkfptr pBKFsini{new BundledKeyFrames(*mCurrentFrame,tvKeyFrames, mpBMap, mpBundledKeyFramesDB, mpComm, eSystemState::CLIENT,-1 )};
+        bkfptr pBKFsini{new BundledKeyFrames(*mCurrentFrame, mpBMap, mpBundledKeyFramesDB, mpComm, eSystemState::CLIENT,-1 )};
         mpBMap->AddBundledKeyFrames(pBKFsini);
         int count = 0;
         for(int i=0; i<mCurrentFrame->N_L_R;i++)
@@ -1102,7 +1102,7 @@ void Tracking::MultiCameraInitialization()
                 mpptr pNewMP{new MapPoint(x3D, pBKFsini, mpBMap, mClientId, mpComm, eSystemState::CLIENT,-1)};
                 if(!pNewMP)
                     cerr << "create mappoint failed"<<endl;
-                pNewMP->AddBKFsObervation(pBKFsini,i, cameraNum);
+                pNewMP->AddBKFsObservation(pBKFsini,i, cameraNum);
       
                 pBKFsini->AddMapPoint(pNewMP, i);
 
@@ -1112,8 +1112,13 @@ void Tracking::MultiCameraInitialization()
                 mpBMap->AddMapPoint(pNewMP);
 
                 mCurrentFrame->mvpMapPointsBKFs[i]=pNewMP;
+
+                pNewMP->SetWorldPos(pNewMP->GetWorldPos(), false);
             }
         }
+
+
+
         cout<<count<<endl;
         cout << "New map created with " << mpBMap->MapPointsInMap() << " points" << endl;
         mpLocalMapper->InsertBundledKeyFrames(pBKFsini); //todo
@@ -1538,7 +1543,7 @@ void Tracking::UpdateLastFrame() //add some temporal map points
     bkfptr pRef = mLastFrame->mpReferenceBKFs;
     cv::Mat Tlr = mlRelativeFramePoses.back();
 
-    mLastFrame->SetPose(Tlr*pRef->mvpKeyFrames[0]->GetPose());
+    mLastFrame->SetPose(Tlr*pRef->GetPose());
     //单目,以及上一帧没关键帧的话,不需要该操作
     if(mLastBundledKeyFramesId == mLastFrame->mId || mSensor == CentralControl::MONOCULAR)
         return;
@@ -2028,27 +2033,27 @@ void Tracking::CreateNewBundledKeyFrames()
     if(!mpLocalMapper->SetNotStop(true))
         return;
 
-    vector<kfptr> tvKeyFrames;
-    tvKeyFrames.reserve(cameraNum);
+    // vector<kfptr> tvKeyFrames;
+    // tvKeyFrames.reserve(cameraNum);
 
-    //create keyframe which is subbundledkeyframe
-    int frameId = -1;
-    for(int i = 0; i < cameraNum; i++)
-    {
-        if(i == 0)
-        {
-            kfptr pKFini {new KeyFrame(*mCurrentFrame,frameId, i, eSystemState::CLIENT,-1)};
-            frameId = pKFini->mId.first;
-            tvKeyFrames.push_back(pKFini);
-        }
-        else
-        {
-            kfptr pKFini {new KeyFrame(*mCurrentFrame,frameId, i, eSystemState::CLIENT,-1)};
-            tvKeyFrames.push_back(pKFini);
-        }
-    }
+    // //create keyframe which is subbundledkeyframe
+    // int frameId = -1;
+    // for(int i = 0; i < cameraNum; i++)
+    // {
+    //     if(i == 0)
+    //     {
+    //         kfptr pKFini {new KeyFrame(*mCurrentFrame,frameId, i, eSystemState::CLIENT,-1)};
+    //         frameId = pKFini->mId.first;
+    //         tvKeyFrames.push_back(pKFini);
+    //     }
+    //     else
+    //     {
+    //         kfptr pKFini {new KeyFrame(*mCurrentFrame,frameId, i, eSystemState::CLIENT,-1)};
+    //         tvKeyFrames.push_back(pKFini);
+    //     }
+    // }
 
-    bkfptr pBKFs{new BundledKeyFrames(*mCurrentFrame, tvKeyFrames, mpBMap, mpBundledKeyFramesDB,mpComm,eSystemState::CLIENT,-1)};
+    bkfptr pBKFs{new BundledKeyFrames(*mCurrentFrame, mpBMap, mpBundledKeyFramesDB,mpComm,eSystemState::CLIENT,-1)};
 
     std::vector<mpptr> vpM = pBKFs->GetMapPointMatches(); 
     for(vector<mpptr>::const_iterator vit = vpM.begin();vit!=vpM.end();++vit)
@@ -2114,7 +2119,7 @@ void Tracking::CreateNewBundledKeyFrames()
                     cv::Mat x3D = mCurrentFrame->ComputeMapPointInWorldFrame(mCurrentFrame->mvx3Ds[i].mPos);
                     mpptr pNewMP{new MapPoint(x3D, pBKFs, mpBMap,mClientId,mpComm,eSystemState::CLIENT,-1)};
                     //Add mappoint's observation(KF, BKFs)
-                    pNewMP->AddBKFsObervation(pBKFs, i, cameraNum);
+                    pNewMP->AddBKFsObservation(pBKFs, i, cameraNum);
                     //Add mappoint into KF and BKFs
                     pBKFs->AddMapPoint(pNewMP, i);
                     pNewMP->ComputeDistinctiveDescriptors();
@@ -2123,6 +2128,8 @@ void Tracking::CreateNewBundledKeyFrames()
                     mpBMap->AddMapPoint(pNewMP);
 
                     mCurrentFrame->mvpMapPointsBKFs[i]=pNewMP;
+
+                    pNewMP->SetWorldPos(pNewMP->GetWorldPos(), false);
                     nPoints++;
                 }
                 else
@@ -2624,6 +2631,16 @@ Tracking::kfptr Tracking::GetReferenceKF()
         cout << "\033[1;33m!!! WARN !!!\033[0m " << __func__ << ":" << __LINE__ << " Tracking assumed to be locked " << endl;
 
     return mpReferenceKF;
+}
+
+Tracking::bkfptr Tracking::GetReferenceBKFs()
+{
+    //Works w/o mutex, since tracking is locked when this method is called by comm
+
+    if(!mpCC->IsTrackingLocked())
+        cout << "\033[1;33m!!! WARN !!!\033[0m " << __func__ << ":" << __LINE__ << " Tracking assumed to be locked " << endl;
+
+    return mpReferenceBKFs;
 }
 
 } //end ns

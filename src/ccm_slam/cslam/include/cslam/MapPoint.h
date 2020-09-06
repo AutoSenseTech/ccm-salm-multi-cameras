@@ -54,6 +54,7 @@
 #include <ccmslam_msgs/MP.h>
 #include <ccmslam_msgs/MPred.h>
 #include <ccmslam_msgs/Map.h>
+#include <ccmslam_msgs/BMap.h>
 
 using namespace std;
 using namespace estd;
@@ -88,6 +89,8 @@ public:
 
     MapPoint(ccmslam_msgs::MP *pMsg, mapptr pMap, commptr pComm, eSystemState SysState, size_t UniqueId = defid, g2o::Sim3 g2oS_wm_wc = g2o::Sim3()); //constructor for messages
 
+    MapPoint(ccmslam_msgs::MP *pMsg, bmapptr pBMap, commptr pComm, eSystemState SysState, size_t UniqueId = defid, g2o::Sim3 g2oS_wm_wc = g2o::Sim3()); //constructor for messages
+
     
 
     void EstablishInitialConnectionsServer(); //this is necessary, because we cannot use shared_from_this() in constructor
@@ -96,6 +99,7 @@ public:
     //---communication---
     void ReduceMessage(ccmslam_msgs::MP *pMsgFull, ccmslam_msgs::MPred *pMsgRed);
     void ConvertToMessage(ccmslam_msgs::Map &msgMap, kfptr pRefKf, g2o::Sim3 mg2oS_wcurmap_wclientmap = g2o::Sim3(), bool bForceUpdateMsg = false);
+    void ConvertToMessage(ccmslam_msgs::BMap &msgBMap, bkfptr pRefBKf, g2o::Sim3 mg2oS_wcurmap_wclientmap = g2o::Sim3(), bool bForceUpdateMsg = false);
     void UpdateFromMessage(ccmslam_msgs::MP *pMsg, g2o::Sim3 mg2oS_wcurmap_wclientmap = g2o::Sim3());
     void UpdateFromMessage(ccmslam_msgs::MPred *pMsg, g2o::Sim3 mg2oS_wcurmap_wclientmap = g2o::Sim3());
     void WriteMembersFromMessage(ccmslam_msgs::MP *pMsg, g2o::Sim3 mg2oS_wcurmap_wclientmap);
@@ -119,6 +123,7 @@ public:
     void AddCommPtr(commptr pComm){unique_lock<mutex> lockMap(mMutexOut); mspComm.insert(pComm);}
     set<commptr> GetCommPtrs(){unique_lock<mutex> lockMap(mMutexOut); return mspComm;}
     size_t GetMaxObsKFId(){unique_lock<mutex> lock(mMutexFeatures); return mMaxObsKFId;}
+    size_t GetMaxObsBKFsId(){unique_lock<mutex> lock(mMutexFeatures); return mMaxObsBKFsId;}
 
     //---visualization---
     std::string GetId();
@@ -143,7 +148,7 @@ public:
 
     void AddObservation(kfptr pKF,size_t idx, bool bLock = false);
     //multi-camera
-    void AddBKFsObervation(bkfptr pBKFs, size_t index, size_t cameraNum, bool bLock = false);
+    void AddBKFsObservation(bkfptr pBKFs, size_t index, size_t cameraNum, bool bLock = false);
 
     void EraseObservation(kfptr pKF, bool bLock = false,bool bSuppressMapAction = false);
     //add for multi-camera
@@ -186,7 +191,9 @@ public:
     float GetMinDistanceInvariance();
     float GetMaxDistanceInvariance();
 
-    int PredictScale(const float &currentDist, kfptr pKF);
+    int PredictScale(const float &currentDist, kfptr pKF);  
+    int PredictScale(const float &currentDist, bkfptr pBKFs);
+    
     int PredictScale(const float &currentDist, frameptr pF);
 
     void RemapObservationId(kfptr pKF, const size_t &idx);

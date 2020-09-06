@@ -69,6 +69,7 @@
 
 //Msgs
 #include <ccmslam_msgs/Map.h>
+#include <ccmslam_msgs/BMap.h>
 #include<ccmslam_msgs/ObjectPosition.h>
 
 using namespace std;
@@ -109,9 +110,11 @@ public:
     typedef boost::shared_ptr<LocalMapping> mappingptr;
 
     typedef pair<size_t,kfptr> AckPairKF;
+    typedef pair<size_t,bkfptr> AckPairBKF;
     typedef pair<size_t,mpptr> AckPairMP;
 
     typedef pair<ccmslam_msgs::KF,ccmslam_msgs::KFred> msgKFPair;
+    typedef pair<ccmslam_msgs::BKF,ccmslam_msgs::BKFred> msgBKFPair;
     typedef pair<ccmslam_msgs::MP,ccmslam_msgs::MPred> msgMPPair;
 
     //---additional functions
@@ -129,7 +132,6 @@ public:
 
 public:
     //---constructor---
-    Communicator(ccptr pCC, vocptr pVoc, mapptr pMap, dbptr pKFDB);
     Communicator(ccptr pCC, vocptr pVoc, bmapptr pBMap, bdbptr pBKFDB);
 
     //---main---
@@ -143,9 +145,10 @@ public:
     dbptr GetDbPtr(){return mpDatabase;}
     size_t GetClientId(){return mClientId;}
     idpair GetNearestKFid(){return mNearestKfId;}
+    idpair GetNearestBKFsid(){return mNearestBKfsId;}
 
     //---callbacks---
-    void MapCbClient(ccmslam_msgs::MapConstPtr pMsg);
+    void MapCbClient(ccmslam_msgs::BMapConstPtr pMsg);
     void MapCbServer(ccmslam_msgs::MapConstPtr pMsg);
     void RequestReset();
     void RequestResetExternal();
@@ -175,7 +178,9 @@ public:
     const double mdPeriodicTime;
 
     kfptr mpNearestKF; //client: store last nearest KF -- server: store current nearest KF
+    bkfptr mpNearestBKFs; //client: store last nearest KF -- server: store current nearest KF
     idpair mNearestKfId;
+    idpair mNearestBKfsId;
 
 	//zmf add 
     map<double,vector<float>> skelePos_list;//client 端 定义的存储骨架信息的数据结构
@@ -183,8 +188,10 @@ public:
 
     map<double,vector<float>> skelePos_list_receive_from_mapmatch;
     int mKfItBound;
+    int mBKfsItBound;
     int mMpItBound;
     int mKfItBoundPub;
+    int mBKfsItBoundPub;
     int mMpItBoundPub;
     int mMaxMsgSentPerIt;
 
@@ -193,6 +200,9 @@ public:
 
     ros::Publisher mPubMap,mPubSke;
     ros::Subscriber mSubMap,mSubSke;
+
+    ros::Publisher mPubBMap;
+    ros::Subscriber mSubBMap;
 
     string mSubKfTopicName;
     string mSubMpTopicName;
@@ -215,28 +225,36 @@ public:
     double mdLastTimePub;
     void ProcessKfInServer();
     void ProcessKfInClient();
+    void ProcessBKfsInClient();
+
     void ProcessMpInServer();
     void ProcessMpInClient();
     size_t mMsgCountLastMapMsg;
     kfptr mpKFLastFront;
+    bkfptr mpBKFsLastFront;
     size_t mnMaxKfIdSent;
+    size_t mnMaxBKfsIdSent;
 
     //---IO buffers---
     set<kfptr,kfcmp> mspBufferKfOut;
     set<bkfptr,bkfcmp> mspBufferBKfsOut;
     set<mpptr,mpcmp> mspBufferMpOut;
     list<msgKFPair> mlBufKFin;
+    list<msgBKFPair> mlBufBKFsin;
     list<msgMPPair> mlBufMPin;
 
     list<kfptr> mlpAddedKfs;
+    list<bkfptr> mlpAddedBKfs;
 
     set<size_t> msAcksKF;
     set<size_t> msAcksMP;
     void SetWeakAckKF(size_t id);
     void SetWeakAckMP(size_t id);
     size_t mnWeakAckKF;
+    size_t mnWeakAckBKFs;
     size_t mnWeakAckMP;
     list<AckPairKF> mlKfOpenAcks;
+    list<AckPairBKF> mlBKfsOpenAcks;
     list<AckPairMP> mlMpOpenAcks;
 
     //---Reset---

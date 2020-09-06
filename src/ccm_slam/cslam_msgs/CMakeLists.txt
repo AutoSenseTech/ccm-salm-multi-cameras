@@ -12,15 +12,23 @@ find_package(catkin REQUIRED COMPONENTS
 
 add_message_files(
   FILES
-  UIntVec.msg
-  Descriptor.msg
+  BKF.msg
+  BKFred.msg
+  BMap.msg
   CvKeyPoint.msg
+  Descriptor.msg
+  KeyPointsIndexMapPlus.msg
   KF.msg
-  ObjectPosition.msg
   KFred.msg
+  Map.msg
   MP.msg
   MPred.msg
-  Map.msg
+  ObjectPosition.msg
+  Tcamji.msg
+  UIntVec.msg
+  VCvKeyPoint.msg
+  VDescriptor.msg
+  Vfloat32.msg 
 )
 
 generate_messages(

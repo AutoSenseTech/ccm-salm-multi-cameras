@@ -26,17 +26,17 @@
 
 namespace cslam {
 
-Communicator::Communicator(ccptr pCC, vocptr pVoc, mapptr pMap, dbptr pKFDB)
-    : mpCC(pCC),
+Communicator::Communicator(ccptr pCC, vocptr pVoc, bmapptr pBMap, bdbptr pBKFDB)
+:mpCC(pCC),
       mNh(pCC->mNh), mNhPrivate(pCC->mNhPrivate),
-      mpVoc(pVoc), mpMap(pMap), mpDatabase(pKFDB),
+      mpVoc(pVoc), mpBMap(pBMap), mpBundledKeyFramesDatabase(pBKFDB),
       mClientId(pCC->mClientId), mbResetRequested(false),
-      mNearestKfId(defpair),mpNearestKF(nullptr),
+      mNearestBKfsId(defpair),mpNearestBKFs(nullptr),
       mdPeriodicTime((pCC->mSysState == eSystemState::CLIENT) ? params::comm::client::mfPubPeriodicTime : params::comm::server::mfPubPeriodicTime),
-      mdLastTimePub(0.0),mnMaxKfIdSent(0),
-      mKfItBound((pCC->mSysState == eSystemState::CLIENT) ? params::comm::client::miKfItBound : params::comm::server::miKfItBound),
+      mdLastTimePub(0.0),mnMaxBKfsIdSent(0),
+      mBKfsItBound((pCC->mSysState == eSystemState::CLIENT) ? params::comm::client::miKfItBound : params::comm::server::miKfItBound),
       mMpItBound((pCC->mSysState == eSystemState::CLIENT) ? params::comm::client::miMpItBound : params::comm::server::miMpItBound),
-      mKfItBoundPub(params::comm::client::miKfPubMax),
+      mBKfsItBoundPub(params::comm::client::miKfPubMax),
       mMpItBoundPub(params::comm::client::miMpPubMax),
       mnEmptyMsgs(0)
 {
@@ -44,7 +44,7 @@ Communicator::Communicator(ccptr pCC, vocptr pVoc, mapptr pMap, dbptr pKFDB)
     mOutMapCount = 0;
     mServerMapCount = 0;
 
-    mnWeakAckKF = KFRANGE;
+    mnWeakAckBKFs = KFRANGE;
     mnWeakAckMP = MPRANGE;
 
     //Topics
@@ -57,19 +57,20 @@ Communicator::Communicator(ccptr pCC, vocptr pVoc, mapptr pMap, dbptr pKFDB)
 
         //Subscriber
         mNhPrivate.param("MapInTopicName",MapInTopicName,std::string("nospec"));
-        mSubMap = mNh.subscribe<ccmslam_msgs::Map>(MapInTopicName,params::comm::client::miSubMapBufferSize,boost::bind(&Communicator::MapCbClient,this,_1));
+        mSubBMap = mNh.subscribe<ccmslam_msgs::BMap>(MapInTopicName,params::comm::client::miSubMapBufferSize,boost::bind(&Communicator::MapCbClient,this,_1));
 
         //Publisher
         ss = new stringstream;
-        *ss << "MapOut" << SysType << mClientId;
+        *ss << "BMapOut" << SysType << mClientId;
         PubMapTopicName = ss->str();
-        mPubMap = mNh.advertise<ccmslam_msgs::Map>(PubMapTopicName,params::comm::client::miPubMapBufferSize);
+        mPubBMap = mNh.advertise<ccmslam_msgs::BMap>(PubMapTopicName,params::comm::client::miPubMapBufferSize);
 
-		//client  对骨架线程传给comm的数据进行发布  然后由server端的comm  线程进行接收 写入到comm 的成员变量中
-        if(mClientId==0)
-        {
-            mPubSke = mNh.advertise<ccmslam_msgs::ObjectPosition>("ObjectPositionTopicName_client",10);
-        }
+        //todo
+		// //client  对骨架线程传给comm的数据进行发布  然后由server端的comm  线程进行接收 写入到comm 的成员变量中
+        // if(mClientId==0)
+        // {
+        //     mPubSke = mNh.advertise<ccmslam_msgs::ObjectPosition>("ObjectPositionTopicName_client",10);
+        // }
     }
     else if(mpCC->mSysState == eSystemState::SERVER)
     {
@@ -79,17 +80,17 @@ Communicator::Communicator(ccptr pCC, vocptr pVoc, mapptr pMap, dbptr pKFDB)
         ss = new stringstream;
         *ss << "MapInTopicName" << mClientId;
         mNhPrivate.param(ss->str(),MapInTopicName,std::string("nospec"));
-        mSubMap = mNh.subscribe<ccmslam_msgs::Map>(MapInTopicName,params::comm::server::miSubMapBufferSize,boost::bind(&Communicator::MapCbServer,this,_1));
+        //mSubBMap = mNh.subscribe<ccmslam_msgs::BMap>(MapInTopicName,params::comm::server::miSubMapBufferSize,boost::bind(&Communicator::MapCbServer,this,_1));
         
-		mSubSke = mNh.subscribe<ccmslam_msgs::ObjectPosition> ("ObjectPositionTopicName_client",10,boost::bind(&Communicator::serversave_skelepos,this,_1));//zmf add
+		//mSubSke = mNh.subscribe<ccmslam_msgs::ObjectPosition> ("ObjectPositionTopicName_client",10,boost::bind(&Communicator::serversave_skelepos,this,_1));//zmf add
         //Publisher
         ss = new stringstream;
-        *ss << "MapOut" << SysType << mClientId;
+        *ss << "BMapOut" << SysType << mClientId;
         PubMapTopicName = ss->str();
-        mPubMap = mNh.advertise<ccmslam_msgs::Map>(PubMapTopicName,params::comm::server::miPubMapBufferSize);
+        //mPubBMap = mNh.advertise<ccmslam_msgs::BMap>(PubMapTopicName,params::comm::server::miPubMapBufferSize);
 		//Publisher
         //server发布关键物体位置信息
-        mPubSke = mNh.advertise<ccmslam_msgs::ObjectPosition>("ObjectPositionTopicName",10);
+        //mPubSke = mNh.advertise<ccmslam_msgs::ObjectPosition>("ObjectPositionTopicName",10);//todo
     }
     else
     {
@@ -104,16 +105,6 @@ Communicator::Communicator(ccptr pCC, vocptr pVoc, mapptr pMap, dbptr pKFDB)
         cout << "Client " << mClientId << " \033[1;31m!!!!! ERROR !!!!!\033[0m Communicator::Communicator(...): bad IN topic name" << endl;
         throw estd::infrastructure_ex();
     }
-}
-
-Communicator::Communicator(ccptr pCC, vocptr pVoc, bmapptr pBMap, bdbptr pBKFDB)
-:mpCC(pCC),
-      mNh(pCC->mNh), mNhPrivate(pCC->mNhPrivate),
-      mpVoc(pVoc), mpBMap(pBMap), mpBundledKeyFramesDatabase(pBKFDB),
-      mClientId(pCC->mClientId), mbResetRequested(false),
-      mdPeriodicTime((pCC->mSysState == eSystemState::CLIENT) ? params::comm::client::mfPubPeriodicTime : params::comm::server::mfPubPeriodicTime)
-{
-
 }
 
 void Communicator::serversave_skelepos(ccmslam_msgs::ObjectPositionConstPtr pMsg)
@@ -199,18 +190,19 @@ void Communicator::RunClient()
         }
         else
         {
-            while(!mpMap->LockMapUpdate()){usleep(params::timings::miLockSleep);}
+            while(!mpBMap->LockBMapUpdate()){usleep(params::timings::miLockSleep);}
         }
 
         this->PublishMapClient();
-		this->PublishObjectPositionClient();
+		//this->PublishObjectPositionClient(); //todo uncomment
 
         {
             unique_lock<mutex> lock(mMutexBuffersIn);
 
-            if(!mlBufKFin.empty())
+            if(!mlBufBKFsin.empty())
             {
-                this->ProcessKfInClient();
+                //this->ProcessKfInClient();
+                this->ProcessBKfsInClient();
             }
 
             if(!mlBufMPin.empty())
@@ -219,20 +211,20 @@ void Communicator::RunClient()
             }
         }
 
-        for(list<kfptr>::iterator lit = mlpAddedKfs.begin();lit != mlpAddedKfs.end();++lit)
+        for(list<bkfptr>::iterator lit = mlpAddedBKfs.begin();lit != mlpAddedBKfs.end();++lit)
         {
-            kfptr pKFi = *lit;
+            bkfptr pBKFi = *lit;
 
-            if(pKFi->GetMapPoints().size() == 0)
+            if(pBKFi->GetMapPoints().size() == 0)
             {
-                pKFi->SetBadFlag(false,true);
+                pBKFi->SetBadFlag(false,true);
             }
             else
             {
-                pKFi->UpdateConnections();
+                pBKFi->UpdateConnections();
             }
         }
-        mlpAddedKfs.clear();
+        mlpAddedBKfs.clear();
 
         if(params::sys::mbStrictLock)
         {
@@ -241,7 +233,7 @@ void Communicator::RunClient()
         }
         else
         {
-            mpMap->UnLockMapUpdate();
+            mpBMap->UnLockBMapUpdate();
         }
 
         ResetIfRequested();
@@ -313,34 +305,34 @@ void Communicator::RunServer()
     }
 }
 
-void Communicator::MapCbClient(ccmslam_msgs::MapConstPtr pMsg)
+void Communicator::MapCbClient(ccmslam_msgs::BMapConstPtr pMsg)
 {
     //cout << "线程1:进入MapCbClient" <<endl;
-    for(int it = 0; it < pMsg->vAckKFs.size() ; ++it)
+    for(int it = 0; it < pMsg->vAckBKFs.size() ; ++it)
     {
-        if(mlKfOpenAcks.empty())
+        if(mlBKfsOpenAcks.empty())
         {
             break;
         }
 
-        int IDi = pMsg->vAckKFs[it];
-        list<AckPairKF>::iterator lit = mlKfOpenAcks.begin();
-        while(lit != mlKfOpenAcks.end())
+        int IDi = pMsg->vAckBKFs[it];
+        list<AckPairBKF>::iterator lit = mlBKfsOpenAcks.begin();
+        while(lit != mlBKfsOpenAcks.end())
         {
-            AckPairKF APi = *lit;
+            AckPairBKF APi = *lit;
 
             if(APi.first == IDi)
             {
-                kfptr pKFi = APi.second;
-                pKFi->Ack();
-                lit = mlKfOpenAcks.erase(lit);
+                bkfptr pBKFsi = APi.second;
+                pBKFsi->Ack();
+                lit = mlBKfsOpenAcks.erase(lit);
                 break;
             }
             else if(APi.first < IDi)
             {
-                kfptr pKFi = APi.second;
-                pKFi->SetSendFull();
-                lit = mlKfOpenAcks.erase(lit);
+                bkfptr pBKFsi = APi.second;
+                pBKFsi->SetSendFull();
+                lit = mlBKfsOpenAcks.erase(lit);
                 continue;
             }
 
@@ -349,20 +341,20 @@ void Communicator::MapCbClient(ccmslam_msgs::MapConstPtr pMsg)
     }
 
     //Weak Acks
-    size_t nWeakAckKF = pMsg->WeakAckKF;
+    size_t nWeakAckBKF = pMsg->WeakAckBKF;
 
-    if(nWeakAckKF != KFRANGE)
+    if(nWeakAckBKF != KFRANGE)
     {
-        list<AckPairKF>::iterator lit = mlKfOpenAcks.begin();
-        while(lit != mlKfOpenAcks.end())
+        list<AckPairBKF>::iterator lit = mlBKfsOpenAcks.begin();
+        while(lit != mlBKfsOpenAcks.end())
         {
-            AckPairKF APi = *lit;
+            AckPairBKF APi = *lit;
 
-            if(APi.first <= nWeakAckKF)
+            if(APi.first <= nWeakAckBKF)
             {
-                kfptr pKFi = APi.second;
-                pKFi->SetSendFull();
-                lit = mlKfOpenAcks.erase(lit);
+                bkfptr pBKFsi = APi.second;
+                pBKFsi->SetSendFull();
+                lit = mlBKfsOpenAcks.erase(lit);
                 continue;
             }
 
@@ -425,7 +417,7 @@ void Communicator::MapCbClient(ccmslam_msgs::MapConstPtr pMsg)
 
     //Pack'em in the input buffers
 
-    if(!pMsg->Keyframes.empty())
+    if(!pMsg->BundledKeyframes.empty())
     {
         if(pMsg->MapPoints.empty())
         {
@@ -434,23 +426,23 @@ void Communicator::MapCbClient(ccmslam_msgs::MapConstPtr pMsg)
         //cout << "Server 有效消息传入 Client" << endl;
         unique_lock<mutex> lock(mMutexBuffersIn);
 
-        ccmslam_msgs::KF msg = pMsg->Keyframes[0];
-        kfptr pRefKf = mpMap->GetKfPtr(msg.mpPred_KfId,msg.mpPred_KfClientId);
-        if(!pRefKf)
+        ccmslam_msgs::BKF msg = pMsg->BundledKeyframes[0];
+        bkfptr pRefBKf = mpBMap->GetBKfsPtr(msg.mpPred_BKfId,msg.mpPred_BKfClientId);
+        if(!pRefBKf)
         {
             return;
         }
 
-        mlBufKFin.clear(); //only use most recent information
+        mlBufBKFsin.clear(); //only use most recent information
         mlBufMPin.clear();
 
-        //Keyframes
-        for(int idx=0;idx<pMsg->Keyframes.size();++idx)
+        //BundledKeyframes
+        for(int idx=0;idx<pMsg->BundledKeyframes.size();++idx)
         {
-            ccmslam_msgs::KF msgFull = pMsg->Keyframes[idx];
-            ccmslam_msgs::KFred msgRed;
+            ccmslam_msgs::BKF msgFull = pMsg->BundledKeyframes[idx];
+            ccmslam_msgs::BKFred msgRed;
             msgRed.mClientId = MAPRANGE;
-            mlBufKFin.push_back(make_pair(msgFull,msgRed));
+            mlBufBKFsin.push_back(make_pair(msgFull,msgRed));
         }
 
         //MapPoints
@@ -582,53 +574,53 @@ void Communicator::PublishMapClient()
 
     mdLastTimePub = ros::Time::now().toSec();
 
-    if(mpMap->KeyFramesInMap()<=params::tracking::miInitKFs) //starting sending not before tracking is initialized stably
+    if(mpBMap->BundledKeyFramesInMap()<=params::tracking::miInitKFs) //starting sending not before tracking is initialized stably
         return;
 
     unique_lock<mutex> lockOut(mMutexBuffersOut);
 
-    ccmslam_msgs::Map msgMap;
-    kfptr pKFFront;
+    ccmslam_msgs::BMap msgBMap;
+    bkfptr pBKFsFront;
 
     int ItCount = 0;
 
-    //Keyframes
+    //BundledKeyframes
     {
-        kfptr pCurKf;
-        set<kfptr>::iterator sit = mspBufferKfOut.begin();
+        bkfptr pCurBKf;
+        set<bkfptr>::iterator sit = mspBufferBKfsOut.begin();
 
-        while(!mspBufferKfOut.empty() && (ItCount < mKfItBoundPub)) //Do not call checkBuffer()-method -- it also need the BufferOutMutex
+        while(!mspBufferBKfsOut.empty() && (ItCount < mKfItBoundPub)) //Do not call checkBuffer()-method -- it also need the BufferOutMutex
         {
-            if(sit == mspBufferKfOut.end())
+            if(sit == mspBufferBKfsOut.end())
                 break;
 
-            pCurKf = *sit;
+            pCurBKf = *sit;
 
-            if(pCurKf->isBad())
+            if(pCurBKf->isBad())
             {
-                sit = mspBufferKfOut.erase(sit);
+                sit = mspBufferBKfsOut.erase(sit);
                 continue;
             }
 
-            int nFullKFs = msgMap.Keyframes.size(); //we need this to determine whether a full KF was added or not
+            int nFullBKFs = msgBMap.BundledKeyframes.size(); //we need this to determine whether a full KF was added or not
 
-            pCurKf->ConvertToMessage(msgMap);
+            pCurBKf->ConvertToMessage(msgBMap);
 
-            pCurKf->UnMarkInOutBuffer();
+            pCurBKf->UnMarkInOutBuffer();
 
-            if(msgMap.Keyframes.size() > nFullKFs)
+            if(msgBMap.BundledKeyframes.size() > nFullBKFs)
             {
-                AckPairKF pAck = make_pair(pCurKf->mId.first,pCurKf);
-                mlKfOpenAcks.push_back(pAck);
+                AckPairBKF pAck = make_pair(pCurBKf->mId.first,pCurBKf);
+                mlBKfsOpenAcks.push_back(pAck);
 
-                if(pCurKf->mId.first > mnMaxKfIdSent && pCurKf->mId.second == mClientId)
-                    mnMaxKfIdSent = pCurKf->mId.first;
+                if(pCurBKf->mId.first > mnMaxBKfsIdSent && pCurBKf->mId.second == mClientId)
+                    mnMaxBKfsIdSent = pCurBKf->mId.first;
             }
 
-            if(!pKFFront)
-                pKFFront = pCurKf;
+            if(!pBKFsFront)
+                pBKFsFront = pCurBKf;
 
-            sit = mspBufferKfOut.erase(sit);
+            sit = mspBufferBKfsOut.erase(sit);
             ++ItCount;
 
             #ifndef HIDEBUFFERLIMITS
@@ -640,17 +632,17 @@ void Communicator::PublishMapClient()
         }
     }
 
-    if(!pKFFront)
+    if(!pBKFsFront)
     {
-        pKFFront = mpKFLastFront;
+        pBKFsFront = mpBKFsLastFront;
     }
 
-    if(!pKFFront && mpCC->mpCH->GetTrackPtr()->mState==Tracking::eTrackingState::OK)
+    if(!pBKFsFront && mpCC->mpCH->GetTrackPtr()->mState==Tracking::eTrackingState::OK)
     {
         return;
     }
     else
-        mpKFLastFront = pKFFront;
+        mpBKFsLastFront = pBKFsFront;
 
     ItCount = 0;
 
@@ -672,19 +664,19 @@ void Communicator::PublishMapClient()
                 continue;
             }
 
-            if(!pCurMp->IsSent() && mnMaxKfIdSent < pCurMp->GetMaxObsKFId())
+            if(!pCurMp->IsSent() && mnMaxBKfsIdSent < pCurMp->GetMaxObsBKFsId())
             {
                 ++sit;
                 continue;
             }
 
-            int nFullMPs = msgMap.MapPoints.size(); //we need this to determine whether a full MP was added or not
+            int nFullMPs = msgBMap.MapPoints.size(); //we need this to determine whether a full MP was added or not
 
-            pCurMp->ConvertToMessage(msgMap,pKFFront);
+            pCurMp->ConvertToMessage(msgBMap,pBKFsFront);
 
             pCurMp->UnMarkInOutBuffer();
 
-            if(msgMap.MapPoints.size() > nFullMPs)
+            if(msgBMap.MapPoints.size() > nFullMPs)
             {
                 AckPairMP pAck = make_pair(pCurMp->mId.first,pCurMp);
                 mlMpOpenAcks.push_back(pAck);
@@ -702,28 +694,28 @@ void Communicator::PublishMapClient()
         }
     }
 
-    kfptr pClosestKF = mpCC->mpCH->GetCurrentRefKFfromTracking();
+    bkfptr pClosestBKFs = mpCC->mpCH->GetCurrentRefBKFsfromTracking();
 
-    if(pClosestKF)
+    if(pClosestBKFs)
     {
-        msgMap.ClosestKf_Id = static_cast<uint16_t>(pClosestKF->mId.first);
-        msgMap.ClosestKf_ClientId = static_cast<uint8_t>(pClosestKF->mId.second);
+        msgBMap.ClosestBKf_Id = static_cast<uint16_t>(pClosestBKFs->mId.first);
+        msgBMap.ClosestBKf_ClientId = static_cast<uint8_t>(pClosestBKFs->mId.second);
     }
     else
     {
-        msgMap.ClosestKf_Id = KFRANGE;
-        msgMap.ClosestKf_ClientId = MAPRANGE;
+        msgBMap.ClosestBKf_Id = KFRANGE;
+        msgBMap.ClosestBKf_ClientId = MAPRANGE;
     }
 
-    bool bSend = !msgMap.Keyframes.empty() || !msgMap.KFUpdates.empty() || !msgMap.MapPoints.empty() || msgMap.MPUpdates.empty() || msgMap.ClosestKf_Id != KFRANGE;
+    bool bSend = !msgBMap.BundledKeyframes.empty() || !msgBMap.BKFUpdates.empty() || !msgBMap.MapPoints.empty() || msgBMap.MPUpdates.empty() || msgBMap.ClosestBKf_Id != KFRANGE;
 
     if(bSend)
     {
         ++mOutMapCount;
-        msgMap.mMsgId = mOutMapCount;
-        msgMap.header.stamp = ros::Time::now();
+        msgBMap.mMsgId = mOutMapCount;
+        msgBMap.header.stamp = ros::Time::now();
         
-        mPubMap.publish(msgMap);
+        mPubBMap.publish(msgBMap);
         // cout << "Client 发送消息　"<<endl;
     }
 }
@@ -907,6 +899,91 @@ void Communicator::ProcessKfInClient()
     }
 }
 
+void Communicator::ProcessBKfsInClient()
+{
+    int ItCount = 0;
+
+    while (!mlBufBKFsin.empty() && (ItCount < mBKfsItBound))
+    {
+        msgBKFPair msgpair = mlBufBKFsin.front();
+        mlBufBKFsin.pop_front();
+
+        if(msgpair.first.mClientId != MAPRANGE)
+        {
+            ccmslam_msgs::BKF* pMsg = new ccmslam_msgs::BKF();
+
+            *pMsg = msgpair.first;
+
+            {
+                idpair RefID = make_pair(pMsg->mpPred_BKfId,pMsg->mpPred_BKfClientId);
+                bkfptr pRefBKfs = mpBMap->GetBKfsPtr(RefID);
+                if(!pRefBKfs)
+                {
+                    delete pMsg;
+                    continue;
+                }
+            }
+            if(pMsg->mbBad)
+            {
+                delete pMsg;
+                continue;
+            }
+
+            bkfptr pBKFs = mpBMap->GetBKfsPtr(pMsg->mnId,pMsg->mClientId);
+
+            if(pBKFs)
+            {
+                if(pMsg->mbPoseChanged)
+                {
+
+                    pBKFs->UpdateFromMessage(pMsg);  //todo client部分很短
+
+                    pBKFs->UpdateConnections();
+                }
+
+            }
+            else
+            {
+                pBKFs.reset(new BundledKeyFrames(pMsg,mpVoc,mpBMap,mpBundledKeyFramesDatabase,shared_from_this(),mpCC->mSysState));
+
+                pBKFs->mdServerTimestamp = ros::Time::now().toNSec();
+
+                if(pBKFs->isBad())
+                {
+                    delete pMsg;
+                    continue;
+                }
+
+                pBKFs->EstablishInitialConnectionsClient();
+                if(pBKFs->isBad())
+                {
+                    delete pMsg;
+                    continue;
+                }
+
+                mpBMap->AddBundledKeyFrames(pBKFs);
+                mlpAddedBKfs.push_back(pBKFs);
+            }
+
+            delete pMsg;
+        }
+        else if(msgpair.second.mClientId != MAPRANGE)
+        {
+            cout << "\033[1;31m!!!!! FATAL ERROR !!!!!\033[0m " << __func__ << ":"  << __LINE__ << " Reception of reduced KF not implemented" << endl;
+            throw estd::infrastructure_ex();   
+        }
+
+        ++ItCount;
+
+        #ifndef HIDEBUFFERLIMITS
+        if(ItCount == mKfItBound)
+        {
+            cout << "\033[1;34m!!! NOTICE !!!\033[0m " << __func__ << ":" << __LINE__ << " -- Agent " << mpCC->mClientId << ": reached INPUT KF iteration limit" << "[" << mlBufKFin.size() << "]" << endl;
+        }
+        #endif
+    }
+}
+
 void Communicator::ProcessKfInServer()
 {
     int ItCount = 0;
@@ -1054,9 +1131,9 @@ void Communicator::ProcessMpInClient()
             *pMsg = msgpair.first;
 
             {
-                idpair RefID = make_pair(pMsg->mpPredKFId,pMsg->mpPredKFClientId);
-                kfptr pRefKf = mpMap->GetKfPtr(RefID);
-                if(!pRefKf)
+                idpair RefID = make_pair(pMsg->mpPredBKFId,pMsg->mpPredBKFClientId);
+                bkfptr pRefBKfs = mpBMap->GetBKfsPtr(RefID);
+                if(!pRefBKfs)
                 {
                     delete pMsg;
                     continue;
@@ -1069,7 +1146,7 @@ void Communicator::ProcessMpInClient()
                 continue;
             }
 
-            mpptr pMP = mpMap->GetMpPtr(pMsg->mnId,pMsg->mClientId);
+            mpptr pMP = mpBMap->GetMpPtr(pMsg->mnId,pMsg->mClientId);
 
             if(pMP)
             {
@@ -1077,12 +1154,12 @@ void Communicator::ProcessMpInClient()
                 {
                     pMP->UpdateFromMessage(pMsg);
 
-                    pMP->UpdateNormalAndDepth();
+                    pMP->UpdateNormalAndDepthPlus();
                 }
             }
             else
             {
-                pMP.reset(new MapPoint(pMsg,mpMap,shared_from_this(),mpCC->mSysState));
+                pMP.reset(new MapPoint(pMsg,mpBMap,shared_from_this(),mpCC->mSysState));
 
                 if(pMP->isBad())
                 {
@@ -1098,7 +1175,7 @@ void Communicator::ProcessMpInClient()
                     continue;
                 }
 
-                mpMap->AddMapPoint(pMP);
+                mpBMap->AddMapPoint(pMP);
             }
 
             delete pMsg;

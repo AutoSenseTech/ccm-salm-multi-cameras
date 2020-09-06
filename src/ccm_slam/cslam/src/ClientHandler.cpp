@@ -456,32 +456,33 @@ void ClientHandler::InitializeClient()
 void ClientHandler::InitializeServer()
 {
     cout << "Client " << mClientId << " --> Initialize Threads" << endl;
-
-    //+++++ Initialize the Loop Finder thread and launch +++++
-    mpLoopFinder.reset(new LoopFinder(mpCC,mpKFDB,mpVoc,mpMap));
-    mptLoopClosure.reset(new thread(&LoopFinder::Run,mpLoopFinder));
-    usleep(10000);
-    //+++++ Initialize the Local Mapping thread +++++
-    mpMapping.reset(new LocalMapping(mpCC,mpMap,mpKFDB,mpViewer));
-    mpMapping->SetLoopFinder(mpLoopFinder); //tempout
-    usleep(10000);
-    //+++++ Initialize the communication thread +++++
-    mpComm.reset(new Communicator(mpCC,mpVoc,mpMap,mpKFDB));
-    mpComm->SetMapping(mpMapping);
-    usleep(10000);
-    mpMapping->SetCommunicator(mpComm);
-    mpMap->SetCommunicator(mpComm);
-    usleep(10000);
-    //Launch Threads
-    //Should not do that before, a fast system might already use a pointer before it was set -> segfault
-    mptMapping.reset(new thread(&LocalMapping::RunServer,mpMapping));
-    mptComm.reset(new thread(&Communicator::RunServer,mpComm));
-    usleep(10000);
-    if(mpCC->mpCH == nullptr)
-    {
-        ROS_ERROR_STREAM("ClientHandler::InitializeThreads()\": mpCC->mpCH is nullptr");
-        throw estd::infrastructure_ex();
-    }
+    //todo
+    // //+++++ Initialize the Loop Finder thread and launch +++++
+    // mpLoopFinder.reset(new LoopFinder(mpCC,mpKFDB,mpVoc,mpMap));
+    // mptLoopClosure.reset(new thread(&LoopFinder::Run,mpLoopFinder));
+    // usleep(10000);
+    // //+++++ Initialize the Local Mapping thread +++++
+    // mpMapping.reset(new LocalMapping(mpCC,mpMap,mpKFDB,mpViewer));
+    // mpMapping->SetLoopFinder(mpLoopFinder); //tempout
+    // usleep(10000);
+    // //+++++ Initialize the communication thread +++++
+    // mpComm.reset(new Communicator(mpCC,mpVoc,mpMap,mpKFDB));
+    // mpComm->SetMapping(mpMapping);
+    // usleep(10000);
+    // mpMapping->SetCommunicator(mpComm);
+    // mpMap->SetCommunicator(mpComm);
+    // usleep(10000);
+    // //Launch Threads
+    // //Should not do that before, a fast system might already use a pointer before it was set -> segfault
+    // mptMapping.reset(new thread(&LocalMapping::RunServer,mpMapping));
+    // mptComm.reset(new thread(&Communicator::RunServer,mpComm));
+    // usleep(10000);
+    // if(mpCC->mpCH == nullptr)
+    // {
+    //     ROS_ERROR_STREAM("ClientHandler::InitializeThreads()\": mpCC->mpCH is nullptr");
+    //     throw estd::infrastructure_ex();
+    // }
+    //endto
 }
 
 void ClientHandler::ChangeMap(mapptr pMap, g2o::Sim3 g2oS_wnewmap_wcurmap)
@@ -770,6 +771,15 @@ ClientHandler::kfptr ClientHandler::GetCurrentRefKFfromTracking()
     else
         return mpTracking->GetReferenceKF();
 }
+
+ClientHandler::bkfptr ClientHandler::GetCurrentRefBKFsfromTracking()
+{
+    if(mpTracking->mState < 2)
+        return nullptr;
+    else
+        return mpTracking->GetReferenceBKFs();
+}
+
 
 int ClientHandler::GetNumKFsinLoopFinder()
 {

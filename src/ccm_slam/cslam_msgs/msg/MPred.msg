@@ -16,6 +16,12 @@ bool mbAck
      uint8 mpPredKFClientId
      uint16 mpParKFId
      uint8 mpParKFClientId
+     
+#Reference BundledKeyFrame
+     uint16 mpPredBKFId
+     uint8 mpPredBKFClientId
+     uint16 mpParBKFId
+     uint8 mpParBKFClientId
 
 #Bad flag
      bool mbBad

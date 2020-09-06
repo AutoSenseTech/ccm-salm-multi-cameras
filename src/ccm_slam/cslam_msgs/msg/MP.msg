@@ -5,6 +5,8 @@ uint8 mClientId # client id
 uint32 mUniqueId
 int16 mnFirstKFid
 uint8 mnFirstKfClientId
+int16  mnFirstBKFid  #mnFirstKFid 
+uint8 mnFirstBKfClientId #mnFirstKfClientId
 bool mbAck
 
 #Position in absolute coordinates
@@ -17,7 +19,12 @@ bool mbAck
 #Keyframes observing the point and associated index in keyframe
      uint16[] mObservations_KFIDs
      uint8[] mObservations_KFClientIDs
+
+#BundledKeyframes observing the point and associated index in bundledkeyframes
+     uint16[] mObservations_BKFIDs
+     uint8[] mObservations_BKFClientIDs
      uint16[] mObservations_n
+
 
 #Mean viewing direction
      float32[3] mNormalVector
@@ -31,6 +38,12 @@ bool mbAck
      uint8 mpPredKFClientId
      uint16 mpParKFId
      uint8 mpParKFClientId
+
+#Reference BundledKeyFrame
+     uint16 mpPredBKFId
+     uint8 mpPredBKFClientId
+     uint16 mpParBKFId
+     uint8 mpParBKFClientId
 
 #Bad flag
      bool mbBad

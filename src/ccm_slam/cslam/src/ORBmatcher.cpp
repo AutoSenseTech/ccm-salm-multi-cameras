@@ -375,7 +375,7 @@ int ORBmatcher::SearchByBoW(bkfptr pBKFs, Frame &F, std::vector<mpptr> &vpMapPoi
                                     break;
                                 }
                             }
-                            const cv::KeyPoint &kp = pBKFs->mvpKeyFrames[cameraIdBKF]->mvKeysUn[idxBKFs];
+                            const cv::KeyPoint &kp = pBKFs->mvKeysMultipleUn[cameraIdBKF][idxBKFs];
                             vector<int> pair_indexF = F.vKeyPointsIndexMapPlus[bestIndexF];
                             int inxF = -1;
                             int cameraIdF = -1;
@@ -1301,19 +1301,19 @@ int ORBmatcher::Fuse(bkfptr pBKFs, const vector<mpptr> &vpMapPoints, const float
     vector<cv::Mat> vRcw(cameraNum);
     vector<cv::Mat> vtcw(cameraNum);
 
-    cv::Mat tTcami0= cv::Mat::eye(4,4,CV_32F); //T10
     for(int subkeyframeid = 0 ; subkeyframeid < cameraNum; subkeyframeid++)
     {
-        const cv::Mat Rciw = pBKFs->mvpKeyFrames[subkeyframeid]->GetRotation(); //c0 cameraid 0
-        const cv::Mat tciw = pBKFs->mvpKeyFrames[subkeyframeid]->GetTranslation();
+        cv::Mat Tciw = pBKFs->vmTi0[subkeyframeid] * pBKFs->GetPose();
+        const cv::Mat Rciw = Tciw.rowRange(0,3).colRange(0,3); //c0 cameraid 0
+        const cv::Mat tciw = Tciw.rowRange(0,3).col(3);   //GetTranslation();
         vRcw[subkeyframeid] = Rciw;
         vtcw[subkeyframeid] = tciw;
     }
-
+    
     int nFused=0;
 
     const int nMPs = vpMapPoints.size();
-
+  
     for(int i=0; i<nMPs; i++)
     {
         mpptr pMP = vpMapPoints[i];
@@ -1338,16 +1338,16 @@ int ORBmatcher::Fuse(bkfptr pBKFs, const vector<mpptr> &vpMapPoints, const float
             const float x = p3Dc.at<float>(0)*invz;
             const float y = p3Dc.at<float>(1)*invz;
 
-            const float u = pBKFs->mvpKeyFrames[k]->fx*x+pBKFs->mvpKeyFrames[k]->cx;
-            const float v = pBKFs->mvpKeyFrames[k]->fy*y+pBKFs->mvpKeyFrames[k]->cy;
-
+            const float u = pBKFs->vfx[k]*x+pBKFs->vcx[k];
+            const float v = pBKFs->vfy[k]*y+pBKFs->vcy[k];
+            
             // Point must be inside the image
-            if(!pBKFs->mvpKeyFrames[k]->IsInImage(u,v))
+            if(!pBKFs->IsInImage(u,v, k))
                 continue;
-
+          
             const float maxDistance = pMP->GetMaxDistanceInvariance();
             const float minDistance = pMP->GetMinDistanceInvariance();
-            cv::Mat twi = pBKFs->mvpKeyFrames[k]->GetCameraCenter();
+            cv::Mat twi = pBKFs->GetCameraCenter(k);
             cv::Mat PO = p3Dw-twi;
             const float dist3D = cv::norm(PO);
 
@@ -1361,15 +1361,14 @@ int ORBmatcher::Fuse(bkfptr pBKFs, const vector<mpptr> &vpMapPoints, const float
             if(PO.dot(Pn)<0.5*dist3D)
                 continue;
 
-            kfptr pKF = pBKFs->mvpKeyFrames[k];
-
-            int nPredictedLevel = pMP->PredictScale(dist3D,pKF);
-
+        
+            int nPredictedLevel = pMP->PredictScale(dist3D,pBKFs);
+        
             // Search in a radius
-            const float radius = th*pKF->mvScaleFactors[nPredictedLevel];
+            const float radius = th*pBKFs->mvScaleFactors[nPredictedLevel];
 
-            const vector<size_t> vIndices = pKF->GetFeaturesInArea(u,v,radius);
-
+            const vector<size_t> vIndices = pBKFs->GetFeaturesInArea(u,v,radius, k);  
+            
             if(vIndices.empty())
                 continue;
 
@@ -1391,7 +1390,7 @@ int ORBmatcher::Fuse(bkfptr pBKFs, const vector<mpptr> &vpMapPoints, const float
             {
                 const size_t idx = *vit;
 
-                const cv::KeyPoint &kp = pKF->mvKeysUn[idx];
+                const cv::KeyPoint &kp = pBKFs->mvKeysMultipleUn[k][idx];
 
                 const int &kpLevel= kp.octave;
 
@@ -1405,10 +1404,10 @@ int ORBmatcher::Fuse(bkfptr pBKFs, const vector<mpptr> &vpMapPoints, const float
                 const float ey = v-kpy;
                 const float e2 = ex*ex+ey*ey;
             
-                if(e2*pKF->mvInvLevelSigma2[kpLevel]>5.99)
+                if(e2*pBKFs->mvInvLevelSigma2[kpLevel]>5.99)
                     continue;
             
-                const cv::Mat &dKF = pKF->mDescriptors.row(idx);
+                const cv::Mat &dKF = pBKFs->mvpDescriptors[k].row(idx);
 
                 const int dist = DescriptorDistance(dMP,dKF);
 
@@ -1444,7 +1443,7 @@ int ORBmatcher::Fuse(bkfptr pBKFs, const vector<mpptr> &vpMapPoints, const float
                 else
                 {
                    
-                    pMP->AddBKFsObervation(pBKFs,bestIndex,cameraNum);
+                    pMP->AddBKFsObservation(pBKFs,bestIndex,cameraNum);
                     pBKFs->AddMapPoint(pMP,bestIndex);
                     
                 }

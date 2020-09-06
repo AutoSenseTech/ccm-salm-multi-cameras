@@ -146,6 +146,7 @@ public:
     cv::Mat mImGray;
 
     kfptr GetReferenceKF();
+    bkfptr GetReferenceBKFs();
     std::vector<mpptr> GetLocalMPs(){return mvpLocalMapPoints;}
 
     // Initialization Variables (Monocular)

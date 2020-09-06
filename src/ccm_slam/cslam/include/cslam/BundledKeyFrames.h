@@ -27,10 +27,10 @@
 #include <thirdparty/DBoW2/DBoW2/FeatureVector.h>
 
 
-//Msgs //todo
-// #include <ccmslam_msgs/KF.h>
-// #include <ccmslam_msgs/KFred.h>
-// #include <ccmslam_msgs/Map.h>
+// Msgs 
+#include <ccmslam_msgs/BKF.h>
+#include <ccmslam_msgs/BKFred.h>
+#include <ccmslam_msgs/BMap.h>
 
 using namespace std;
 using namespace estd;
@@ -56,11 +56,32 @@ public:
 
 public:
 //---constructor---
-    BundledKeyFrames(Frame &F, const vector<kfptr> &vKeyFrames, bmapptr pBMap, bdbptr pBKFDB, commptr pComm, eSystemState SysState, size_t UniqueId);
-//---communication---
-    void MarkInOutBuffer() {unique_lock<mutex> lock(mMutexOut); mbInOutBuffer = true;}
-    bool CanBeForgotten();
+    //BundledKeyFrames(Frame &F, const vector<kfptr> &vKeyFrames, bmapptr pBMap, bdbptr pBKFDB, commptr pComm, eSystemState SysState, size_t UniqueId);
+    BundledKeyFrames(Frame &F, bmapptr pBMap, bdbptr pBKFDB, commptr pComm, eSystemState SysState, size_t UniqueId);
+    BundledKeyFrames(ccmslam_msgs::BKF* pMsg, vocptr pVoc, bmapptr pBMap, bdbptr pBKFDB, commptr pComm, eSystemState SysState,
+                       size_t UniqueId = defid, g2o::Sim3 mg2oS_wcurmap_wclientmap = g2o::Sim3()); 
 
+    void EstablishInitialConnectionsClient();
+//---communication---
+    void ReduceMessage(ccmslam_msgs::BKF *pMsgFull, ccmslam_msgs::BKFred *pMsgRed);
+    void ConvertToMessage(ccmslam_msgs::BMap &msgBMap, g2o::Sim3 mg2oS_wcurmap_wclientmap = g2o::Sim3(), bkfptr pRefBKfs = nullptr, bool bForceUpdateMsg = false);
+    void UpdateFromMessage(ccmslam_msgs::BKF *pMsg, g2o::Sim3 mg2oS_wcurmap_wclientmap = g2o::Sim3());
+    void UpdateFromMessage(ccmslam_msgs::BKFred *pMsg, g2o::Sim3 mg2oS_wcurmap_wclientmap = g2o::Sim3());
+    void WriteMembersFromMessage(ccmslam_msgs::BKF *pMsg, g2o::Sim3 mg2oS_wcurmap_wclientmap);
+    bool SetPoseFromMessage(ccmslam_msgs::BKF *pMsg, g2o::Sim3 mg2oS_wcurmap_wclientmap);
+    bool SetPoseFromMessage(ccmslam_msgs::BKFred *pMsg, g2o::Sim3 mg2oS_wcurmap_wclientmap);
+
+
+    void SendMe();
+    void MarkInOutBuffer() {unique_lock<mutex> lock(mMutexOut); mbInOutBuffer = true;}
+    void UnMarkInOutBuffer() {unique_lock<mutex> lock(mMutexOut); mbInOutBuffer = false;}
+    bool IsInOutBuffer() {unique_lock<mutex> lock(mMutexOut); return mbInOutBuffer;}
+    bool CanBeForgotten();
+    bool SentToClient(size_t ClientId){unique_lock<mutex> lock(mMutexOut); return msuSentToClient.count(ClientId);}
+    void Ack(){unique_lock<mutex> lock(mMutexOut); mbAck = true;}
+    bool AckSet(){unique_lock<mutex> lock(mMutexOut); return mbAck;}
+    bool IsSent(){unique_lock<mutex> lock(mMutexOut); return mbSentOnce;}
+    void SetSendFull();
     
 //---set/get pointers---
     void AddCommPtr(commptr pComm){unique_lock<mutex> lockBMap(mMutexOut); mspComm.insert(pComm);}
@@ -68,7 +89,13 @@ public:
 //---visualization---
     bool mbFromServer;
     bool mbUpdatedByServer;
-    
+
+// Pose functions
+    void SetPose(const cv::Mat &Tcw, bool bLock, bool bIgnorePoseMutex = false);
+    cv::Mat GetPose();
+    cv::Mat GetPoseInverse();
+    cv::Mat GetCameraCenter(const int &cameraId);
+
 // MapPoint observation functions
     void AddMapPoint(mpptr pMP, const size_t &index, bool bLock = false); 
     void EraseMapPointMatch(const size_t &index, bool bLock = false);
@@ -99,6 +126,12 @@ public:
     bkfptr GetParent(bool bIgnorePoseMutex = false);
     bool hasChild(bkfptr pBKFs);
 
+    // KeyPoint functions
+    std::vector<size_t> GetFeaturesInArea(const float &x, const float  &y, const float  &r, const int &cameraId) const;
+
+    // Image
+    bool IsInImage(const float &x, const float &y, const int &cameraId) const;
+
 // Set/check bad / empty flag
     void SetBadFlag(bool bSuppressMapAction = false, bool bNoParent = false);
     bool isBad() {unique_lock<mutex> lock(mMutexConnections); return mbBad;}
@@ -108,8 +141,11 @@ public:
 public:
     //Add new variable
     int cameraNum;
-    vector<kfptr> mvpKeyFrames;  //for multiplue camera
+    //vector<kfptr> mvpKeyFrames;  //for multiplue camera
+
     vector<cv::Mat> mvTcamji;  //for multi camera
+    cv::Mat mTi0;
+    vector<cv::Mat> vmTi0;
     //vector<set<int>> vUpdatedKPIndex; //for multicamerastd::vector<pair<int, int>> vKeyPointsIndexMap;  //map for left feature index and right feature index
     vector<vector<int>> vKeyPointsIndexMapPlus;  //for multicamera
     //vector<set<int>> vUpdatedKPIndex; //for multicamera
@@ -125,6 +161,12 @@ public:
     idpair mId;
     size_t mUniqueId;
     size_t mVisId;
+
+    // Grid (to speed up feature matching)
+    int mnGridCols;
+    int mnGridRows;
+    vector<float> mvGridElementWidthInv;
+    vector<float> mvGridElementHeightInv;
 
     // Variables used by the tracking
     idpair mTrackReferenceForFrame;
@@ -144,19 +186,25 @@ public:
     float mRelocScore;
 
     // Variables used by loop closing
-    // cv::Mat mTcwGBA;
-    // cv::Mat mTcwBefGBA;
+    cv::Mat mTcwGBA;
+    cv::Mat mTcwBefGBA;
     idpair mBAGlobalForBKFs;
-    // bool mbLoopCorrected;
+    bool mbLoopCorrected;
 
     // Variables used by map merging
     idpair mCorrected_MM;
 
     // Calibration parameters
-    const vector<float> vfx, vfy, vcx, vcy, vinvfx, vinvfy;
+    vector<float> vfx, vfy, vcx, vcy, vinvfx, vinvfy;
 
-    // Number of KeyPoints
+    vector<int> mvpkeyPointsNum;
+
+    // Number of KeyPoints fused
     int N;
+    
+    vector<vector<cv::KeyPoint>> mvKeysMultipleUn; //multi
+    //for multi-camera descriptors
+    vector<cv::Mat> mvpDescriptors;
 
     cv::Mat mDescriptors;
     vector<float> mvBDepth;
@@ -173,7 +221,13 @@ public:
     float mfLogScaleFactor;
     std::vector<float> mvScaleFactors;
     std::vector<float> mvLevelSigma2;
-    std::vector<float> mvInvLevelSigma2;
+    std::vector<float> mvInvLevelSigma2;  //not multi
+
+    vector<float> mvMinX;
+    vector<float> mvMaxX;
+    vector<float> mvMinY;
+    vector<float> mvMaxY;
+    vector<cv::Mat> mvpK;
 
     // Transformation to body frame (for KF write-out
     Eigen::Matrix4d mT_SC;
@@ -199,6 +253,8 @@ protected:
     cv::Mat Tcw;
     cv::Mat Twc;
     cv::Mat Ow;
+    vector<cv::Mat> vOw;
+
     bool mbPoseLock;
     bool mbPoseChanged;
     double mdPoseTime;
@@ -209,9 +265,12 @@ protected:
     std::vector<bool> mvbMapPointsLock;
 
     // Grid over the image to speed up feature matching
-    void AssignFeaturesToGrid();
-    bool PosInGrid(const cv::KeyPoint &kp, int &posX, int &posY);
-    std::vector< std::vector <std::vector<size_t> > > mGrid;
+    void AssignFeaturesToGrid(const int &cameraId);
+    bool PosInGrid(const cv::KeyPoint &kp, int &posX, int &posY, const int &cameraId);
+    std::vector< std::vector <std::vector<size_t> > > mGrid0;
+    std::vector< std::vector <std::vector<size_t> > > mGrid1;
+    std::vector< std::vector <std::vector<size_t> > > mGrid2;
+    std::vector< std::vector <std::vector<size_t> > > mGrid3;
 
     map<bkfptr,int> mConnectedBundledKeyFramesWeights;
     vector<bkfptr> mvpOrderedConnectedBundledKeyFrames;

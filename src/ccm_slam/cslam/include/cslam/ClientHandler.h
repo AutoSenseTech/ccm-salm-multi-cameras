@@ -111,6 +111,7 @@ public:
     dbptr GetDbPtr(){return mpKFDB;}
     vocptr GetVocPtr(){return mpVoc;}
     kfptr GetCurrentRefKFfromTracking();
+    bkfptr GetCurrentRefBKFsfromTracking();
     int GetNumKFsinLoopFinder();
     int GetNumKFsinMapMatcher();
 

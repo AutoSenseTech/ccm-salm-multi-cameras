@@ -170,6 +170,16 @@ BundledMap::bkfptr BundledMap::GetBKfsPtr(size_t BKfsId, size_t ClientId, bool b
     else return nullptr;
 }
 
+BundledMap::bkfptr BundledMap::GetErasedBKfsPtr(size_t BKfsId, size_t ClientId)
+{
+    unique_lock<mutex> lock(mMutexBMap);
+
+    idpair idp = make_pair(BKfsId,ClientId);
+    std::map<idpair,bkfptr>::iterator mit = mmpErasedBundledKeyFrames.find(idp);
+    if(mit != mmpErasedBundledKeyFrames.end()) return mit->second;
+    else return nullptr;
+}
+
 vector<BundledMap::mpptr> BundledMap::GetAllMapPoints()
 {
     unique_lock<mutex> lock(mMutexBMap);
@@ -477,6 +487,32 @@ void BundledMap::FindLocalBKFsByTime(bkfptr pBKFcur,set<bkfptr>& sBKfsVicinity,p
                 break;
         }
     }
+}
+
+BundledMap::bkfptr BundledMap::GetPredecessor(bkfptr pBKFs)
+{
+    bkfptr pPred;
+    size_t bkfid = pBKFs->mId.first;
+    while(!pPred)
+    {
+        bkfid--;
+
+        if(bkfid == -1)
+        {
+            cout << "\033[1;31m!!!!! FATAL !!!!!\033[0m " << __func__ << __LINE__ << " cannot find predecessor" << endl;
+            cout << "BKF ID: " << pBKFs->mId.first << "|" << pBKFs->mId.second << endl;
+            cout << "In map: " << this->mnMaxBKFsid << endl;
+            cout << "Workaround: take first BKF (id 0)" << endl;
+            pPred = this->GetBKfsPtr(0,mBMapId);
+            cout << "get BKF: 0|" << mBMapId <<" -- nullptr? " << (int)!pPred << endl;
+        }
+        else
+        {
+            pPred = this->GetBKfsPtr(bkfid,pBKFs->mId.second);
+        }
+    }
+
+    return pPred;
 }
 
 }

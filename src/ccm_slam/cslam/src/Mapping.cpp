@@ -87,13 +87,12 @@ void LocalMapping::RunClient()
 
             if(!CheckNewBundledKeyFrames())
             {
-                // cout<<"SearchInNeighbors enter"<<endl;
-                // long temp_time = long(mpCurrentBundledKeyFrames->mTimeStamp*100 - 140363650000);
-                // cout<<"第"<<mpCurrentBundledKeyFrames->mId.first<<"帧时间戳 :"<<temp_time<<endl;
-                // Find more matches in neighbor keyframes and fuse point duplications
+                long temp_time = long(mpCurrentBundledKeyFrames->mTimeStamp*100 - 140363650000);
+                cout<<"第"<<mpCurrentBundledKeyFrames->mId.first<<"帧时间戳 :"<<temp_time<<endl;
+                //Find more matches in neighbor keyframes and fuse point duplications
                 SearchInNeighbors();
                
-                //cout<<"SearchInNeighbors success"<<endl;
+                cout<<"SearchInNeighbors success"<<endl;
             }
 
             mbAbortBA = false;
@@ -111,7 +110,7 @@ void LocalMapping::RunClient()
                 if(mpBMap->BundledKeyFramesInMap()>2)
                 {
                     Optimizer::LocalBundleAdjustmentClient(mpCurrentBundledKeyFrames,&mbAbortBA,mpBMap,mClientId);
-                    //cout<<"LocalBundleAdjustmentClient success"<<endl;
+                    cout<<"LocalBundleAdjustmentClient success"<<endl;
                 }
                     
             }
@@ -298,7 +297,7 @@ void LocalMapping::ProcessNewBundledKeyFrames()
                 {
                     if(!pMP->IsInBundledKeyFrames(mpCurrentBundledKeyFrames))
                     {
-                        pMP->AddBKFsObervation(mpCurrentBundledKeyFrames, i,mpCurrentBundledKeyFrames->cameraNum);
+                        pMP->AddBKFsObservation(mpCurrentBundledKeyFrames, i,mpCurrentBundledKeyFrames->cameraNum);
                         pMP->UpdateNormalAndDepthPlus();
                         pMP->ComputeDistinctiveDescriptors();
                     }
@@ -764,17 +763,18 @@ void LocalMapping::SearchInNeighbors()
             vpTargetBKFs.push_back(pBKFsi2);
         }
     }
-
+    
     // Search matches by projection from current KF in target KFs
     ORBmatcher matcher;
     vector<mpptr> vpMapPointMatches = mpCurrentBundledKeyFrames->GetMapPointMatches();
+   
     for(vector<bkfptr>::iterator vit=vpTargetBKFs.begin(), vend=vpTargetBKFs.end(); vit!=vend; vit++)
     {
         bkfptr pBKFsi = *vit;
 
         matcher.Fuse(pBKFsi,vpMapPointMatches);
     }
- 
+   
     // Search matches by projection from target KFs in current KF
     vector<mpptr> vpFuseCandidates;
     vpFuseCandidates.reserve(vpTargetBKFs.size()*vpMapPointMatches.size());

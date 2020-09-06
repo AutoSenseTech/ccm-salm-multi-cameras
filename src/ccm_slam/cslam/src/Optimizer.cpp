@@ -1239,7 +1239,7 @@ void Optimizer::LocalBundleAdjustmentClient(bkfptr pBKFs, bool* pbStopFlag, bmap
         }
 
         g2o::VertexSE3Expmap * vSE3 = new g2o::VertexSE3Expmap();
-        vSE3->setEstimate(Converter::toSE3Quat(pBKFsi->mvpKeyFrames[0]->GetPose()));
+        vSE3->setEstimate(Converter::toSE3Quat(pBKFsi->GetPose()));
         vSE3->setId(Optimizer::GetID(pBKFsi->mId,true));
         vSE3->setFixed(pBKFsi->mId.first == 0 && pBKFsi->mId.second == ClientId);
         optimizer.addVertex(vSE3);
@@ -1257,7 +1257,7 @@ void Optimizer::LocalBundleAdjustmentClient(bkfptr pBKFs, bool* pbStopFlag, bmap
         }
 
         g2o::VertexSE3Expmap * vSE3 = new g2o::VertexSE3Expmap();
-        vSE3->setEstimate(Converter::toSE3Quat(pBKFsi->mvpKeyFrames[0]->GetPose()));
+        vSE3->setEstimate(Converter::toSE3Quat(pBKFsi->GetPose()));
         vSE3->setId(Optimizer::GetID(pBKFsi->mId,true));
         vSE3->setFixed(true);
         optimizer.addVertex(vSE3);
@@ -1331,7 +1331,7 @@ void Optimizer::LocalBundleAdjustmentClient(bkfptr pBKFs, bool* pbStopFlag, bmap
                         {
                             Eigen::Matrix<double,2,1> obs;
                             int idx = pair_index[k];
-                            const cv::KeyPoint &kpUn = pBKFsi->mvpKeyFrames[0]->mvKeysUn[idx];
+                            const cv::KeyPoint &kpUn = pBKFsi->mvKeysMultipleUn[0][idx];
                             obs << kpUn.pt.x, kpUn.pt.y;
 
                             g2o::EdgeSE3ProjectXYZ* e = new g2o::EdgeSE3ProjectXYZ();
@@ -1339,7 +1339,7 @@ void Optimizer::LocalBundleAdjustmentClient(bkfptr pBKFs, bool* pbStopFlag, bmap
                             e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
                             e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(GetID(pBKFsi->mId,true))));
                             e->setMeasurement(obs);
-                            const float &invSigma2 = pBKFsi->mvpKeyFrames[0]->mvInvLevelSigma2[kpUn.octave];
+                            const float &invSigma2 = pBKFsi->mvInvLevelSigma2[kpUn.octave];
                             e->setInformation(Eigen::Matrix2d::Identity()*invSigma2);
 
                             g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
@@ -1360,7 +1360,7 @@ void Optimizer::LocalBundleAdjustmentClient(bkfptr pBKFs, bool* pbStopFlag, bmap
                         {
                             Eigen::Matrix<double,2,1> obs;
                             int idx = pair_index[k];
-                            const cv::KeyPoint &kpUn = pBKFsi->mvpKeyFrames[k]->mvKeysUn[idx];
+                            const cv::KeyPoint &kpUn = pBKFsi->mvKeysMultipleUn[k][idx];
                             obs << kpUn.pt.x, kpUn.pt.y;
 
                             g2o::EdgeSE3ProjectXYZPlus* e = new g2o::EdgeSE3ProjectXYZPlus();
@@ -1368,7 +1368,7 @@ void Optimizer::LocalBundleAdjustmentClient(bkfptr pBKFs, bool* pbStopFlag, bmap
                             e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
                             e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(GetID(pBKFsi->mId,true))));
                             e->setMeasurement(obs);
-                            const float &invSigma2 = pBKFsi->mvpKeyFrames[k]->mvInvLevelSigma2[kpUn.octave];
+                            const float &invSigma2 = pBKFsi->mvInvLevelSigma2[kpUn.octave];
                             e->setInformation(Eigen::Matrix2d::Identity()*invSigma2);
 
                             g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
@@ -1379,7 +1379,7 @@ void Optimizer::LocalBundleAdjustmentClient(bkfptr pBKFs, bool* pbStopFlag, bmap
                             e->fy = pBKFsi->vfy[k];
                             e->cx = pBKFsi->vcx[k];
                             e->cy = pBKFsi->vcy[k];
-                            e->Trl = Converter::toMatrix4d(pBKFs->mvpKeyFrames[1]->mTi0);
+                            e->Trl = Converter::toMatrix4d(pBKFs->vmTi0[k]);
                             optimizer.addEdge(e);
                             vpEdgesMono1.push_back(e);
                             vpEdgeBKFsMono1.push_back(pBKFsi);
@@ -1505,9 +1505,9 @@ void Optimizer::LocalBundleAdjustmentClient(bkfptr pBKFs, bool* pbStopFlag, bmap
         g2o::SE3Quat SE3quat = vSE3->estimate();
         
         //ADD
-        Mat mTcwLBA_tmp = Converter::toCvMat(SE3quat)*pBKFs->mvpKeyFrames[0]->GetPoseInverse();
+        Mat mTcwLBA_tmp = Converter::toCvMat(SE3quat)*pBKFs->GetPoseInverse();
         Eigen::Matrix4d testLBA = Converter::toMatrix4d(mTcwLBA_tmp);
-        Eigen::Matrix4d poseBef = Converter::toMatrix4d(pBKFs->mvpKeyFrames[0]->GetPoseInverse());
+        Eigen::Matrix4d poseBef = Converter::toMatrix4d(pBKFs->GetPoseInverse());
         Eigen::Matrix4d poseAfLBA = Converter::toMatrix4d(Converter::toCvMat(SE3quat).inv());
 
         if(testLBA.block<3,1>(0,3).norm()>0.5)
@@ -1519,7 +1519,7 @@ void Optimizer::LocalBundleAdjustmentClient(bkfptr pBKFs, bool* pbStopFlag, bmap
         }
         else
         {
-            pBKFs->mvpKeyFrames[0]->SetPose(Converter::toCvMat(SE3quat),false);
+            pBKFs->SetPose(Converter::toCvMat(SE3quat),false);
             
         }
         //END

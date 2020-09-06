@@ -19,8 +19,8 @@
 #include <cslam/Communicator.h>
 
 
-//Msgs todo
-//#include <ccmslam_msgs/Map.h>
+//Msgs
+#include <ccmslam_msgs/BMap.h>
 
 using namespace std;
 using namespace estd;
@@ -81,10 +81,15 @@ public:
     mpptr GetMpPtr(size_t MpId, size_t ClientId);
     mpptr GetMpPtr(idpair id){return GetMpPtr(id.first,id.second);} 
     bkfptr GetBKfsPtr(size_t BKfsId, size_t ClientId, bool bIgnoreMutex = false);    
+    bkfptr GetBKfsPtr(idpair id){return GetBKfsPtr(id.first,id.second);}
+    bkfptr GetErasedBKfsPtr(size_t BKfsId, size_t ClientId);
+    bkfptr GetErasedBKfsPtr(idpair id){return GetErasedBKfsPtr(id.first,id.second);}
     vector<mpptr> GetAllMapPoints();
     long unsigned int MapPointsInMap();
 
     long unsigned  BundledKeyFramesInMap();
+    bkfptr GetPredecessor(bkfptr pBKFs);
+
 
 //---data---
     vector<bkfptr> mvpBundledKeyFramesOrigins;
