@@ -1807,7 +1807,7 @@ void Optimizer::BMapFusionGBA(bmapptr pBMap, size_t ClientId, int nIterations, b
 {
     stringstream* ss;
     ss = new stringstream;
-    for(set<size_t>::iterator sit = pBMap->msuAssClients.begin();sit != pMap->msuAssClients.end();++sit)
+    for(set<size_t>::iterator sit = pBMap->msuAssClients.begin();sit != pBMap->msuAssClients.end();++sit)
         *ss << *sit << ";";
     cout << "--> Optimizing BMap " << pBMap->mBMapId << " -- Contains Agents " << ss->str() << endl;
     delete ss;
@@ -1975,7 +1975,7 @@ void Optimizer::BMapFusionGBA(bmapptr pBMap, size_t ClientId, int nIterations, b
                         e->fy = pBKF->vfy[k];
                         e->cx = pBKF->vcx[k];
                         e->cy = pBKF->vcy[k];
-                        e->Trl = Converter::toMatrix4d(pBKFs->vmTi0[k]);
+                        e->Trl = Converter::toMatrix4d(pBKF->vmTi0[k]);
                         optimizer.addEdge(e);
                     }
                 }                    
@@ -1990,39 +1990,39 @@ void Optimizer::BMapFusionGBA(bmapptr pBMap, size_t ClientId, int nIterations, b
 
     // Recover optimized data
 
-    //Keyframes
-    cout << "----- Recover KFs" << endl;
-    for(size_t i=0; i<vpKFs.size(); i++)
+    //BundledKeyframes
+    cout << "----- Recover BKFs" << endl;
+    for(size_t i=0; i<vpBKFs.size(); i++)
     {
-        kfptr pKF = vpKFs[i];
-        if(pKF->isBad())
+        bkfptr pBKF = vpBKFs[i];
+        if(pBKF->isBad())
             continue;
 
-        g2o::VertexSE3Expmap* vSE3 = static_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(pKF->mUniqueId));
+        g2o::VertexSE3Expmap* vSE3 = static_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(pBKF->mUniqueId));
         g2o::SE3Quat SE3quat = vSE3->estimate();
 
-        if(nLoopKF==zeropair)
+        if(nLoopBKF==zeropair)
         {
-            pKF->SetPose(Converter::toCvMat(SE3quat),true);
+            pBKF->SetPose(Converter::toCvMat(SE3quat),true);
         }
         else
         {
-            pKF->mTcwGBA.create(4,4,CV_32F);
-            Converter::toCvMat(SE3quat).copyTo(pKF->mTcwGBA);
+            pBKF->mTcwGBA.create(4,4,CV_32F);
+            Converter::toCvMat(SE3quat).copyTo(pBKF->mTcwGBA);
             //Add
-            Mat mTcwGBA_tmp = Converter::toCvMat(SE3quat)*pKF->GetPoseInverse();
+            Mat mTcwGBA_tmp = Converter::toCvMat(SE3quat)*pBKF->GetPoseInverse();
             Eigen::Matrix4d testGBA = Converter::toMatrix4d(mTcwGBA_tmp);
-            Eigen::Matrix4d poseBef = Converter::toMatrix4d(pKF->GetPoseInverse());
+            Eigen::Matrix4d poseBef = Converter::toMatrix4d(pBKF->GetPoseInverse());
             Eigen::Matrix4d poseAfGBA = Converter::toMatrix4d(Converter::toCvMat(SE3quat).inv());
 
             if(testGBA.block<3,1>(0,3).norm()>0.5)
             {
-                cout<<"第"<<pKF->mId.second<<" client, 第"<<pKF->mId.first<<" client"<<"时间戳:"<<setprecision(25)<<pKF->mTimeStamp<<"的GPA效果不好!!!!"<<endl;
+                cout<<"第"<<pBKF->mId.second<<" client, 第"<<pBKF->mId.first<<" client"<<"时间戳:"<<setprecision(25)<<pBKF->mTimeStamp<<"的GPA效果不好!!!!"<<endl;
                 cout<<"GBA之前的位置： "<<poseBef.block<3,1>(0,3).transpose()<<endl;
                 cout<<"GBA之后的位置： "<<poseAfGBA.block<3,1>(0,3).transpose()<<endl;
             }
             //End
-            pKF->mBAGlobalForKF = nLoopKF;
+            pBKF->mBAGlobalForBKFs = nLoopBKF;
         }
     }
 
@@ -2040,16 +2040,16 @@ void Optimizer::BMapFusionGBA(bmapptr pBMap, size_t ClientId, int nIterations, b
 
         g2o::VertexSBAPointXYZ* vPoint = static_cast<g2o::VertexSBAPointXYZ*>(optimizer.vertex(pMP->mUniqueId));
 
-        if(nLoopKF==zeropair)
+        if(nLoopBKF==zeropair)
         {
             pMP->SetWorldPos(Converter::toCvMat(vPoint->estimate()),true);
-            pMP->UpdateNormalAndDepth();
+            pMP->UpdateNormalAndDepthPlus();
         }
         else
         {
             pMP->mPosGBA.create(3,1,CV_32F);
             Converter::toCvMat(vPoint->estimate()).copyTo(pMP->mPosGBA);
-            pMP->mBAGlobalForKF = nLoopKF;
+            pMP->mBAGlobalForBKFs = nLoopBKF;
         }
     }
 }

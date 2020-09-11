@@ -199,7 +199,7 @@ public:
     #endif
 
     void RequestBA(size_t nClientId);
-    void RunGBA(idpair nLoopKF);
+    void RunGBA(idpair nLoopBKF);
     set<size_t> msnFinishedAgents;
 
 

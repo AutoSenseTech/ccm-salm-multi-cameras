@@ -80,7 +80,7 @@ Communicator::Communicator(ccptr pCC, vocptr pVoc, bmapptr pBMap, bdbptr pBKFDB)
         ss = new stringstream;
         *ss << "MapInTopicName" << mClientId;
         mNhPrivate.param(ss->str(),MapInTopicName,std::string("nospec"));
-        //mSubBMap = mNh.subscribe<ccmslam_msgs::BMap>(MapInTopicName,params::comm::server::miSubMapBufferSize,boost::bind(&Communicator::MapCbServer,this,_1));
+        mSubBMap = mNh.subscribe<ccmslam_msgs::BMap>(MapInTopicName,params::comm::server::miSubMapBufferSize,boost::bind(&Communicator::MapCbServer,this,_1));
         
 		//mSubSke = mNh.subscribe<ccmslam_msgs::ObjectPosition> ("ObjectPositionTopicName_client",10,boost::bind(&Communicator::serversave_skelepos,this,_1));//zmf add
         //Publisher
@@ -263,7 +263,7 @@ void Communicator::RunServer()
         #endif
         this->PublishMapServer();
 		
-		this->PublishObjectPositionServer();
+		//this->PublishObjectPositionServer();
 
         {
             unique_lock<mutex> lock(mMutexBuffersIn);
@@ -460,33 +460,33 @@ void Communicator::MapCbClient(ccmslam_msgs::BMapConstPtr pMsg)
     }
 }
 
-void Communicator::MapCbServer(ccmslam_msgs::MapConstPtr pMsg)
+void Communicator::MapCbServer(ccmslam_msgs::BMapConstPtr pMsg)
 {
     //cout << "++++++++++++++++++MapCbServer++++++++++++++++++++++" << endl;
     {
         unique_lock<mutex> lock(mMutexBuffersIn);
 
-        if(pMsg->KFUpdates.size() > 0)
+        if(pMsg->BKFUpdates.size() > 0)
         {
             //cout << "+++++ server 更新KF　+++++" << endl;
-            for(int idx=0;idx<pMsg->KFUpdates.size();++idx)
+            for(int idx=0;idx<pMsg->BKFUpdates.size();++idx)
             {
-                ccmslam_msgs::KF msgFull;
+                ccmslam_msgs::BKF msgFull;
                 msgFull.mClientId = MAPRANGE;
-                ccmslam_msgs::KFred msgRed = pMsg->KFUpdates[idx];
-                mlBufKFin.push_back(make_pair(msgFull,msgRed));
+                ccmslam_msgs::BKFred msgRed = pMsg->BKFUpdates[idx];
+                mlBufBKFsin.push_back(make_pair(msgFull,msgRed));
             }
         }
 
-        if(pMsg->Keyframes.size() > 0)
+        if(pMsg->BundledKeyframes.size() > 0)
         {
             //cout << "+++++ server 添加KF　+++++" << endl;
-            for(int idx=0;idx<pMsg->Keyframes.size();++idx)
+            for(int idx=0;idx<pMsg->BundledKeyframes.size();++idx)
             {
-                ccmslam_msgs::KF msgFull = pMsg->Keyframes[idx];
-                ccmslam_msgs::KFred msgRed;
+                ccmslam_msgs::BKF msgFull = pMsg->BundledKeyframes[idx];
+                ccmslam_msgs::BKFred msgRed;
                 msgRed.mClientId = MAPRANGE;
-                mlBufKFin.push_back(make_pair(msgFull,msgRed));
+                mlBufBKFsin.push_back(make_pair(msgFull,msgRed));
             }
         }
 
@@ -515,30 +515,30 @@ void Communicator::MapCbServer(ccmslam_msgs::MapConstPtr pMsg)
     }
 
     {
-        unique_lock<mutex> lock(mMutexNearestKf);
+        unique_lock<mutex> lock(mMutexNearestBKf);
 
-        mNearestKfId = make_pair(pMsg->ClosestKf_Id,pMsg->ClosestKf_ClientId);
-        if(mNearestKfId.first != KFRANGE)
+        mNearestBKfsId = make_pair(pMsg->ClosestBKf_Id,pMsg->ClosestBKf_ClientId);
+        if(mNearestBKfsId.first != KFRANGE)
         {
-            kfptr pKF = mpMap->GetKfPtr(pMsg->ClosestKf_Id,pMsg->ClosestKf_ClientId);
-            if(pKF)
-                mpNearestKF = pKF;
+            bkfptr pBKF = mpBMap->GetBKfsPtr(pMsg->ClosestBKf_Id,pMsg->ClosestBKf_ClientId);
+            if(pBKF)
+                mpNearestBKFs = pBKF;
         }
     }
 
     #ifdef INTERRUPTBA
-    if(pMsg->KFUpdates.size() > 0 || pMsg->Keyframes.size() > 0 || pMsg->MPUpdates.size() || pMsg->MapPoints.size() > 0)
+    if(pMsg->BKFUpdates.size() > 0 || pMsg->BundledKeyframes.size() > 0 || pMsg->MPUpdates.size() || pMsg->MapPoints.size() > 0)
     {
-        if(mpMap->isRunningGBA())
+        if(mpBMap->isRunningGBA())
         {
-            mpMap->StopGBA();
+            mpBMap->StopGBA();
         }
 
         mnEmptyMsgs = 0;
     }
     else
     {
-        if(mpMap->GetMaxKFid() > 10)
+        if(mpBMap->GetMaxBKFid() > 10)
         {
             //make sure map was initialized
 
@@ -553,10 +553,10 @@ void Communicator::MapCbServer(ccmslam_msgs::MapConstPtr pMsg)
                 #endif
 
                 #ifdef FINALBA
-                if(mpMap->isGBAinterrupted() && !mpMap->isRunningGBA())
+                if(mpBMap->isGBAinterrupted() && !mpBMap->isRunningGBA())
                 {
                     cout << "Comm " << mpCC->mClientId << ": Trigger GBA" << endl;
-                    mpMap->RequestBA(mpCC->mClientId);
+                    mpBMap->RequestBA(mpCC->mClientId);
                     mnEmptyMsgs = 0; //reset this value, otherwise a finished module will request BA in every interation -- not good if other module is still running
                 }
                 #endif

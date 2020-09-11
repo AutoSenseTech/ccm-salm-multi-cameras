@@ -507,7 +507,7 @@ BMapMerger::bmapptr BMapMerger::MergeBMaps(bmapptr pBMapCurr, bmapptr pBMapMatch
 
     // Launch a new thread to perform Global Bundle Adjustment
     cout << "--- Launch GBA thread" << endl;
-    pFusedBMap->mpThreadGBA = new thread(&BMapMerger::RunGBA,this,nLoopKf,pFusedMap); //todo
+    pFusedBMap->mpThreadGBA = new thread(&BMapMerger::RunGBA,this,nLoopBKf,pFusedBMap); //todo
 
     cout << "\033[1;32;41m!!! MAPS MERGED !!!\033[0m" << endl;
     this->SetIdle();
@@ -609,71 +609,71 @@ void BMapMerger::RunGBA(idpair nLoopBKf, bmapptr pFusedBMap)
     {
         unique_lock<mutex> lock(pFusedBMap->mMutexGBA);
 
-        while(!pFusedBMap->LockMapUpdate()){usleep(params::timings::miLockSleep);}
+        while(!pFusedBMap->LockBMapUpdate()){usleep(params::timings::miLockSleep);}
 
         cout << "-> Global Bundle Adjustment finished" << endl;
-        cout << "-> Updating map ..." << endl;
+        cout << "-> Updating Bmap ..." << endl;
         int nBadGBA = 0;
         // Correct keyframes starting at map first keyframe
-        list<kfptr> lpKFtoCheck(pFusedMap->mvpKeyFrameOrigins.begin(),pFusedMap->mvpKeyFrameOrigins.end());
+        list<bkfptr> lpBKFtoCheck(pFusedBMap->mvpBundledKeyFramesOrigins.begin(),pFusedBMap->mvpBundledKeyFramesOrigins.end());
 
-        cout << "--> Updating KFs ..." << endl;
+        cout << "--> Updating BKFs ..." << endl;
 
-        while(!lpKFtoCheck.empty())
+        while(!lpBKFtoCheck.empty())
         {
-            kfptr pKF = lpKFtoCheck.front();
-            const set<kfptr> sChilds = pKF->GetChilds();
-            cv::Mat Twc = pKF->GetPoseInverse();
+            bkfptr pBKF = lpBKFtoCheck.front();
+            const set<bkfptr> sChilds = pBKF->GetChilds();
+            cv::Mat Twc = pBKF->GetPoseInverse();
 
-            //ADD
-            Eigen::Matrix4d testGBA = Converter::toMatrix4d(pKF->mTcwGBA*pKF->GetPoseInverse());
+            //ADD CHECK
+            Eigen::Matrix4d testGBA = Converter::toMatrix4d(pBKF->mTcwGBA*pBKF->GetPoseInverse());
             bool bAcceptGBA = false;
 
             if(testGBA.block<3,1>(0,3).norm()<0.5){
                 bAcceptGBA = true;
             }
             else {
-                pKF->mTcwGBA = pKF->GetPose();
+                pBKF->mTcwGBA = pBKF->GetPose();
                 nBadGBA++;
             }
             //END
-            for(set<kfptr>::const_iterator sit=sChilds.begin();sit!=sChilds.end();sit++)
+            for(set<bkfptr>::const_iterator sit=sChilds.begin();sit!=sChilds.end();sit++)
             {
-                kfptr pChild = *sit;
-                if(pChild->mBAGlobalForKF!=nLoopKf)
+                bkfptr pChild = *sit;
+                if(pChild->mBAGlobalForBKFs!=nLoopBKf)
                 {
                     cv::Mat Tchildc = pChild->GetPose()*Twc;
-                    pChild->mTcwGBA = Tchildc*pKF->mTcwGBA;
+                    pChild->mTcwGBA = Tchildc*pBKF->mTcwGBA;
                     #ifdef DEBUGGING2
                     if(!(pChild->mTcwGBA.dims >= 2))
                         std::cout << COUTERROR << " KF" << pChild->mId.first << "|" << pChild->mId.second << ": !(pChild->mTcwGBA.dims >= 2)" << std::endl;
                     #endif
-                    pChild->mBAGlobalForKF=nLoopKf;
+                    pChild->mBAGlobalForBKFs=nLoopBKf;
 
                 }
-                lpKFtoCheck.push_back(pChild);
+                lpBKFtoCheck.push_back(pChild);
             }
 
             #ifdef DEBUGGING2
-            if(!(pKF->mTcwGBA.dims >= 2))
-                std::cout << COUTERROR << " KF" << pKF->mId.first << "|" << pKF->mId.second << ": !(pKF->mTcwGBA.dims >= 2)" << std::endl;
+            if(!(pBKF->mTcwGBA.dims >= 2))
+                std::cout << COUTERROR << " BKF" << pBKF->mId.first << "|" << pBKF->mId.second << ": !(pBKF->mTcwGBA.dims >= 2)" << std::endl;
             #endif
 
-            pKF->mTcwBefGBA = pKF->GetPose();
+            pBKF->mTcwBefGBA = pBKF->GetPose();
             #ifdef DEBUGGING2
-            if(!(pKF->mTcwBefGBA.dims >= 2))
-                std::cout << COUTERROR << " KF" << pKF->mId.first << "|" << pKF->mId.second << ": !(pKF->mTcwBefGBA.dims >= 2)" << std::endl;
+            if(!(pBKF->mTcwBefGBA.dims >= 2))
+                std::cout << COUTERROR << " BKF" << pBKF->mId.first << "|" << pBKF->mId.second << ": !(pBKF->mTcwBefGBA.dims >= 2)" << std::endl;
             #endif
             if(bAcceptGBA)
-                pKF->SetPose(pKF->mTcwGBA,true);
+                pBKF->SetPose(pBKF->mTcwGBA,true);
             //pKF->SetPose(pKF->mTcwGBA,true);
-            lpKFtoCheck.pop_front();
+            lpBKFtoCheck.pop_front();
         }
-         cout << "+++++GBA坏掉的帧数(Map Merger)： "<<nBadGBA<<endl;
+        cout << "+++++GBA坏掉的帧数(Map Merger)： "<<nBadGBA<<endl;
         cout << "--> Updating MPs ..." << endl;
 
         // Correct MapPoints
-        const vector<mpptr> vpMPs = pFusedMap->GetAllMapPoints();
+        const vector<mpptr> vpMPs = pFusedBMap->GetAllMapPoints();
 
         for(size_t i=0; i<vpMPs.size(); i++)
         {
@@ -682,7 +682,7 @@ void BMapMerger::RunGBA(idpair nLoopBKf, bmapptr pFusedBMap)
             if(pMP->isBad())
                 continue;
 
-            if(pMP->mBAGlobalForKF==nLoopKf)
+            if(pMP->mBAGlobalForBKFs==nLoopBKf)
             {
                 // If optimized by Global BA, just update
                 #ifdef DEBUGGING2
@@ -694,52 +694,24 @@ void BMapMerger::RunGBA(idpair nLoopBKf, bmapptr pFusedBMap)
             else
             {
                 // Update according to the correction of its reference keyframe
-                kfptr pRefKF = pMP->GetReferenceKeyFrame();
+                bkfptr pRefBKF = pMP->GetReferenceBundledKeyFrame();
 
-                if(!pRefKF)
+                if(!pRefBKF)
                 {
-                    cout << "\033[1;31m!!! ERROR !!!\033[0m In \"LoopFinder::CorrectLoop()\": pRefKf is nullptr" << endl;
+                    cout << "\033[1;31m!!! ERROR !!!\033[0m In \"LoopFinder::CorrectLoop()\": pRefBKF is nullptr" << endl;
                     continue;
                 }
 
-                if(pRefKF->mBAGlobalForKF!=nLoopKf)
+                if(pRefBKF->mBAGlobalForBKFs!=nLoopBKf)
                     continue;
-
-                #ifdef DEBUGGING2
-                if(!(pRefKF->mTcwBefGBA.dims >= 2))
-                {
-                    std::cout << COUTERROR << " KF" << pRefKF->mId.first << "|" << pRefKF->mId.second << ": !(pRefKF->mTcwBefGBA.dims >= 2)" << std::endl;
-                    std::cout << "bad? " << (int)pRefKF->isBad() << std::endl;
-                    std::cout << "mBAGlobalForKF: " << pRefKF->mBAGlobalForKF.first << "|" << pRefKF->mBAGlobalForKF.second << std::endl;
-                    std::cout << "nLoopKF: " << nLoopKf.first << "|" << nLoopKf.second << std::endl;
-//                    kfptr pKFp = pRefKF->GetParent();
-//                    std::cout << "Parent " << pKFp->mId.first << "|" << pKFp->mId.second << " -- bad: " << (int)pKFp->isBad() << std::endl;
-
-                    std::cout << "KF Lineage: " << std::endl;
-                    kfptr pKFp = pRefKF->GetParent();
-                    while(pKFp)
-                    {
-                        std::cout << "--> " << pKFp->mId.first << "|" << pKFp->mId.second << " -- bad: " << (int)pKFp->isBad() << std::endl;
-                        if(pKFp == pKFp->GetParent())
-                        {
-                            std::cout << "--> " << pKFp->mId.first << "|" << pKFp->mId.second << " -- bad: " << (int)pKFp->isBad() << std::endl;
-                            break;
-                        }
-                        pKFp = pKFp->GetParent();
-                    }
-
-                    pRefKF->mTcwBefGBA = pRefKF->GetPose();
-                }
-                #endif
-
 
                 // Map to non-corrected camera
-                cv::Mat Rcw = pRefKF->mTcwBefGBA.rowRange(0,3).colRange(0,3);
-                cv::Mat tcw = pRefKF->mTcwBefGBA.rowRange(0,3).col(3);
+                cv::Mat Rcw = pRefBKF->mTcwBefGBA.rowRange(0,3).colRange(0,3);
+                cv::Mat tcw = pRefBKF->mTcwBefGBA.rowRange(0,3).col(3);
                 cv::Mat Xc = Rcw*pMP->GetWorldPos()+tcw;
 
                 // Backproject using corrected camera
-                cv::Mat Twc = pRefKF->GetPoseInverse();
+                cv::Mat Twc = pRefBKF->GetPoseInverse();
                 cv::Mat Rwc = Twc.rowRange(0,3).colRange(0,3);
                 cv::Mat twc = Twc.rowRange(0,3).col(3);
 
@@ -750,14 +722,14 @@ void BMapMerger::RunGBA(idpair nLoopBKf, bmapptr pFusedBMap)
         cout << "-> Map updated!" << endl;
 
         #ifdef FINALBA
-        pFusedMap->unsetGBAinterrupted();
+        pFusedBMap->unsetGBAinterrupted();
         #endif
 
         #ifdef DONOTINTERRUPTMERGE
-        pFusedMap->unsetMergeStepGBA();
+        pFusedBMap->unsetMergeStepGBA();
         #endif
 
-        pFusedMap->UnLockMapUpdate();
+        pFusedBMap->UnLockBMapUpdate();
     }
     #ifdef FINALBA
     else
@@ -765,29 +737,29 @@ void BMapMerger::RunGBA(idpair nLoopBKf, bmapptr pFusedBMap)
         cout << COUTNOTICE << "GBA interrupted" << endl;
 
         #ifdef DONOTINTERRUPTMERGE
-        if(pFusedMap->isMergeStepGBA())
+        if(pFusedBMap->isMergeStepGBA())
         {
             cout << COUTFATAL << endl;
             KILLSYS
         }
         #endif
 
-        pFusedMap->setGBAinterrupted();
+        pFusedBMap->setGBAinterrupted();
     }
     #endif
+    //todo  write file
+    // if(params::stats::mbWriteKFsToFile)
+    // {
+    //     for(int it=0;it<4;++it)
+    //     {
+    //         std::stringstream ss;
+    //         ss << params::stats::msOutputDir << "BKF_GBA_" << it << ".csv";
+    //         pFusedBMap->WriteStateToCsv(ss.str(),it);
+    //     }
+    // }
 
-    if(params::stats::mbWriteKFsToFile)
-    {
-        for(int it=0;it<4;++it)
-        {
-            std::stringstream ss;
-            ss << params::stats::msOutputDir << "KF_GBA_" << it << ".csv";
-            pFusedMap->WriteStateToCsv(ss.str(),it);
-        }
-    }
-
-    pFusedMap->setFinishedGBA();
-    pFusedMap->unsetRunningGBA();
+    pFusedBMap->setFinishedGBA();
+    pFusedBMap->unsetRunningGBA();
 
     for(set<ccptr>::iterator sit = spCC.begin();sit!=spCC.end();++sit)
     {

@@ -150,7 +150,7 @@ public:
 
     //---callbacks---
     void MapCbClient(ccmslam_msgs::BMapConstPtr pMsg);
-    void MapCbServer(ccmslam_msgs::MapConstPtr pMsg);
+    void MapCbServer(ccmslam_msgs::BMapConstPtr pMsg);
     void RequestReset();
     void RequestResetExternal();
 
@@ -274,7 +274,7 @@ public:
     mutex mMutexReset;
     mutex mMutexLastMsgId;
     mutex mMutexNearestKf;
-
+    mutex mMutexNearestBKf;
     //--Final BA if interrupted
     size_t mnEmptyMsgs;
 

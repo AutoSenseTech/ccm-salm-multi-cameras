@@ -514,6 +514,239 @@ void BundledMap::StopGBA()
     cout << "BMap " << mBMapId << ": GBA Stopped" << endl;
 }
 
+void BundledMap::RequestBA(size_t nClientId)
+{
+    if(this->isRunningGBA())
+    {
+        cout << "Denied -- GBA running" << endl;
+        return;
+    }
+
+    if(this->isNoStartGBA())
+    {
+        cout << "Denied -- NoStartGBA" << endl;
+        return;
+    }
+
+    #ifdef FINALBA
+    if(!this->isGBAinterrupted())
+        cout << COUTERROR << "Agent " << nClientId << " requesting BA, but was not interrupted" << endl;
+    #endif
+
+    msnFinishedAgents.insert(nClientId);
+
+    if(msnFinishedAgents.size() == msuAssClients.size())
+    {
+        bool b0 = false;
+        bool b1 = false;
+        bool b2 = false;
+        bool b3 = false;
+
+        for(set<ccptr>::iterator sit = mspCC.begin();sit!=mspCC.end();++sit)
+        {
+            ccptr pCC = *sit;
+
+            if(pCC->mClientId > 3) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"LoopFinder::CorrectLoop()\": associated ClientId out of bounds (" << pCC->mClientId << ")" << endl;
+            if(!(this->msuAssClients.count(pCC->mClientId))) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"LoopFinder::CorrectLoop()\": associated ClientId in pCC but not in msuAssClients" << endl;
+            switch(pCC->mClientId)
+            {
+                case(static_cast<size_t>(0)):
+                    if(b0) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"LoopFinder::CorrectLoop()\": associated ClientId found twice" << endl;
+                    b0 = true;
+                    #ifdef LOGGING
+//                    pCC->mpLogger->SetMappingLock(__LINE__,pCC->mClientId);
+                    #endif
+                    while(!pCC->LockMapping()){usleep(params::timings::miLockSleep);}
+                    break;
+                case(static_cast<size_t>(1)):
+                    if(b1) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"LoopFinder::CorrectLoop()\": associated ClientId found twice" << endl;
+                    b1 = true;
+                    #ifdef LOGGING
+//                    pCC->mpLogger->SetMappingLock(__LINE__,pCC->mClientId);
+                    #endif
+                    while(!pCC->LockMapping()){usleep(params::timings::miLockSleep);}
+                    break;
+                case(static_cast<size_t>(2)):
+                    if(b2) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"LoopFinder::CorrectLoop()\": associated ClientId found twice" << endl;
+                    b2 = true;
+                    #ifdef LOGGING
+//                    pCC->mpLogger->SetMappingLock(__LINE__,pCC->mClientId);
+                    #endif
+                    while(!pCC->LockMapping()){usleep(params::timings::miLockSleep);}
+                    break;
+                case(static_cast<size_t>(3)):
+                    if(b3) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"LoopFinder::CorrectLoop()\": associated ClientId found twice" << endl;
+                    b3 = true;
+                    #ifdef LOGGING
+//                    pCC->mpLogger->SetMappingLock(__LINE__,pCC->mClientId);
+                    #endif
+                    while(!pCC->LockMapping()){usleep(params::timings::miLockSleep);}
+                    break;
+                default: cout << "\033[1;31m!!! ERROR !!!\033[0m In \"LoopFinder::CorrectLoop()\": associated ClientId out of bounds" << endl;
+            }
+
+            pCC->mbOptActive = true;
+        }
+
+        idpair nLoopBKF = make_pair(mnLastBKfsIdUnique,mBMapId);
+
+        this->setRunningGBA();
+        this->setFinishedGBA();
+        this->mbStopGBA = false;
+
+        // Launch a new thread to perform Global Bundle Adjustment
+        this->mpThreadGBA = new thread(&BundledMap::RunGBA,this,nLoopBKF);
+    }
+    else
+    {
+        cout << "msuAssClient: " << endl;
+        for(set<size_t>::iterator sit = msuAssClients.begin();sit!=msuAssClients.end();++sit)
+            cout << *sit;
+        cout << endl;
+
+        cout << "msuFinishedAgents: " << endl;
+        for(set<size_t>::iterator sit = msnFinishedAgents.begin();sit!=msnFinishedAgents.end();++sit)
+            cout << *sit;
+        cout << endl;
+    }
+}
+
+void BundledMap::RunGBA(idpair nLoopBKF)
+{
+    cout << "-> Starting Global Bundle Adjustment" << endl;
+
+    Optimizer::BMapFusionGBA(shared_from_this(),this->mBMapId,params::opt::mGBAIterations,&(this->mbStopGBA),nLoopBKF,true);
+
+    #ifdef FINALBA
+    if(!this->mbStopGBA)
+    #endif
+    {
+        unique_lock<mutex> lock(this->mMutexGBA);
+
+        this->LockBMapUpdate();
+
+        cout << "-> Global Bundle Adjustment finished" << endl;
+        cout << "-> Updating Bmap ..." << endl;
+
+        // Correct keyframes starting at map first keyframe
+        list<bkfptr> lpBKFtoCheck(this->mvpBundledKeyFramesOrigins.begin(),this->mvpBundledKeyFramesOrigins.end());
+
+        cout << "--> Updating BKFs ..." << endl;
+
+        while(!lpBKFtoCheck.empty())
+        {
+            bkfptr pBKF = lpBKFtoCheck.front();
+            const set<bkfptr> sChilds = pBKF->GetChilds();
+            cv::Mat Twc = pBKF->GetPoseInverse();
+            for(set<bkfptr>::const_iterator sit=sChilds.begin();sit!=sChilds.end();sit++)
+            {
+                bkfptr pChild = *sit;
+                if(pChild->mBAGlobalForBKFs!=nLoopBKF)
+                {
+                    cv::Mat Tchildc = pChild->GetPose()*Twc;
+                    pChild->mTcwGBA = Tchildc*pBKF->mTcwGBA;//*Tcorc*pKF->mTcwGBA;
+                    pChild->mBAGlobalForBKFs=nLoopBKF;
+
+                }
+                lpBKFtoCheck.push_back(pChild);
+            }
+
+           
+            pBKF->mTcwBefGBA = pBKF->GetPose();
+           
+            pBKF->SetPose(pBKF->mTcwGBA,true);
+            pBKF->mbLoopCorrected = true;
+            lpBKFtoCheck.pop_front();
+        }
+
+        cout << "--> Updating MPs ..." << endl;
+
+        // Correct MapPoints
+        const vector<mpptr> vpMPs = this->GetAllMapPoints();
+
+        for(size_t i=0; i<vpMPs.size(); i++)
+        {
+            mpptr pMP = vpMPs[i];
+
+            if(pMP->isBad())
+                continue;
+
+            if(pMP->mBAGlobalForBKFs==nLoopBKF)
+            {
+                // If optimized by Global BA, just update
+                pMP->SetWorldPos(pMP->mPosGBA,true);
+                pMP->mbLoopCorrected = true;
+            }
+            else
+            {
+                // Update according to the correction of its reference keyframe
+                bkfptr pRefBKF = pMP->GetReferenceBundledKeyFrame();
+
+                if(!pRefBKF)
+                {
+                    cout << "\033[1;31m!!! ERROR !!!\033[0m In \"LoopFinder::CorrectLoop()\": pRefKf is nullptr" << endl;
+                    continue;
+                }
+
+                if(pRefBKF->mBAGlobalForBKFs!=nLoopBKF)
+                    continue;
+
+                // Map to non-corrected camera
+                cv::Mat Rcw = pRefBKF->mTcwBefGBA.rowRange(0,3).colRange(0,3);
+                cv::Mat tcw = pRefBKF->mTcwBefGBA.rowRange(0,3).col(3);
+                cv::Mat Xc = Rcw*pMP->GetWorldPos()+tcw;
+
+                // Backproject using corrected camera
+                cv::Mat Twc = pRefBKF->GetPoseInverse();
+                cv::Mat Rwc = Twc.rowRange(0,3).colRange(0,3);
+                cv::Mat twc = Twc.rowRange(0,3).col(3);
+
+                pMP->SetWorldPos(Rwc*Xc+twc,true);
+                pMP->mbLoopCorrected = true;
+            }
+        }
+
+        cout << "-> BMap updated!" << endl;
+
+        #ifdef FINALBA
+        this->unsetGBAinterrupted();
+        #endif
+
+        this->UnLockBMapUpdate();
+    }
+    #ifdef FINALBA
+    else
+    {
+        cout << COUTNOTICE << "GBA interrupted" << endl;
+        this->setGBAinterrupted();
+    }
+    #endif
+    //todo
+    // if(params::stats::mbWriteKFsToFile)
+    // {
+    //     for(int it=0;it<4;++it)
+    //     {
+    //         std::stringstream ss;
+    //         ss << params::stats::msOutputDir << "KF_GBA_" << it << ".csv";
+    //         this->WriteStateToCsv(ss.str(),it);
+    //     }
+    // }
+
+    this->setFinishedGBA();
+    this->unsetRunningGBA();
+
+    for(set<ccptr>::iterator sit = mspCC.begin();sit!=mspCC.end();++sit)
+    {
+        ccptr pCC = *sit;
+        pCC->UnLockMapping();
+
+        pCC->mbOptActive = false;
+    }
+
+    cout << "-> Leave Thread" << endl;
+}
+
+
 void BundledMap::ClearBadMPs()
 {
     unique_lock<mutex> lock(mMutexBMap);
