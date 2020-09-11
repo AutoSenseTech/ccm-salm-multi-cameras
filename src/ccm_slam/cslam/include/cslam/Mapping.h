@@ -95,7 +95,7 @@ public:
     void SetMapMatcher(matchptr pMatch) {mpMapMatcher = pMatch;}
 
     void ChangeMap(mapptr pMap){mpMap = pMap;}
-
+    void ChangeBMap(bmapptr pBMap){mpBMap = pBMap;}
     //Forwarding
     void ClearCovGraph(size_t MapId);
 
@@ -149,6 +149,7 @@ protected:
     void SearchInNeighbors();
 
     void KeyFrameCullingV3();
+    void BundledKeyFramesCullingV3();
 
     cv::Mat ComputeF12(kfptr &pKF1, kfptr &pKF2);
 
@@ -183,6 +184,7 @@ protected:
     std::list<kfptr> mlpRecentAddedKFs;
     std::list<bkfptr> mlpRecentAddedBKFs;
     set<kfptr>mspKFsCheckedForCulling;
+    set<bkfptr>mspBKFsCheckedForCulling;
 
     //reset/interrupt
     bool mbAbortBA;

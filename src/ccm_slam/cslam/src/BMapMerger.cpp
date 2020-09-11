@@ -1,32 +1,8 @@
-/**
-* This file is part of CCM-SLAM.
-*
-* Copyright (C): Patrik Schmuck <pschmuck at ethz dot ch> (ETH Zurich)
-* For more information see <https://github.com/patriksc/CCM-SLAM>
-*
-* CCM-SLAM is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* (at your option) any later version.
-*
-* CCM-SLAM is based in the monocular version of ORB-SLAM2 by Raúl Mur-Artal.
-* CCM-SLAM partially re-uses modules of ORB-SLAM2 in modified or unmodified condition.
-* For more information see <https://github.com/raulmur/ORB_SLAM2>.
-*
-* CCM-SLAM is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with CCM-SLAM. If not, see <http://www.gnu.org/licenses/>.
-*/
-
-#include <cslam/MapMerger.h>
+#include <cslam/BMapMerger.h>
 
 namespace cslam {
 
-MapMerger::MapMerger(matchptr pMatcher)
+BMapMerger::BMapMerger(matchptr pMatcher)
     : bIsBusy(false), mpMatcher(pMatcher)
 {
     if(!mpMatcher)
@@ -36,17 +12,17 @@ MapMerger::MapMerger(matchptr pMatcher)
     }
 }
 
-MapMerger::mapptr MapMerger::MergeMaps(mapptr pMapCurr, mapptr pMapMatch, vector<MapMatchHit> vMatchHits)
+BMapMerger::bmapptr BMapMerger::MergeBMaps(bmapptr pBMapCurr, bmapptr pBMapMatch, vector<MapMatchHit> vMatchHits)
 {
     // Make sure no other module can start GBA
     bool bProblem = false;
 
-    if(pMapCurr->isNoStartGBA())
+    if(pBMapCurr->isNoStartGBA())
     {
         bProblem = true;
     }
 
-    if(pMapMatch->isNoStartGBA())
+    if(pBMapMatch->isNoStartGBA())
     {
         bProblem = true;
     }
@@ -54,22 +30,22 @@ MapMerger::mapptr MapMerger::MergeMaps(mapptr pMapCurr, mapptr pMapMatch, vector
     if(bProblem)
     {
         std::cout << __func__ << ":" << __LINE__ << " Waiting for GBA to be able to Start" << std::endl;
-        while(pMapCurr->isNoStartGBA() || pMapMatch->isNoStartGBA())
+        while(pBMapCurr->isNoStartGBA() || pBMapMatch->isNoStartGBA())
         {
             usleep(params::timings::miLockSleep);
         }
         std::cout << __func__ << ":" << __LINE__  << "Continue" << std::endl;
     }
 
-    pMapCurr->setNoStartGBA();
-    pMapMatch->setNoStartGBA();
+    pBMapCurr->setNoStartGBA();
+    pBMapMatch->setNoStartGBA();
 
     // If a Global Bundle Adjustment is running, abort it
-    if(pMapCurr->isRunningGBA())
-        pMapCurr->StopGBA();
+    if(pBMapCurr->isRunningGBA())
+        pBMapCurr->StopGBA();
 
-    if(pMapMatch->isRunningGBA())
-        pMapMatch->StopGBA();
+    if(pBMapMatch->isRunningGBA())
+        pBMapMatch->StopGBA();
 
     this->SetBusy();
 
@@ -78,20 +54,20 @@ MapMerger::mapptr MapMerger::MergeMaps(mapptr pMapCurr, mapptr pMapMatch, vector
     bool b2 = false;
     bool b3 = false;
 
-    set<ccptr> spCCC = pMapCurr->GetCCPtrs();
-    set<ccptr> spCCM = pMapMatch->GetCCPtrs();
+    set<ccptr> spCCC = pBMapCurr->GetCCPtrs();
+    set<ccptr> spCCM = pBMapMatch->GetCCPtrs();
 
     #ifdef LOGGING
     ccptr pCClog = *(spCCC.begin());
     pCClog->mpLogger->SetMerge(__LINE__,0);
     #endif
 
-    if(spCCC.size() != pMapCurr->msuAssClients.size())
+    if(spCCC.size() != pBMapCurr->msuAssClients.size())
     {
-        cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMerger::MergeMaps()\": spCCC.size() != pMapCurr->msuAssClients.size()" << endl;
-        cout << "Map id: " << pMapCurr->mMapId << endl;
+        cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMerger::MergeMaps()\": spCCC.size() != pBMapCurr->msuAssClients.size()" << endl;
+        cout << "BMap id: " << pBMapCurr->mBMapId << endl;
         cout << "Associated client IDs:" << endl;
-        for(set<size_t>::const_iterator sit = pMapCurr->msuAssClients.begin();sit!=pMapCurr->msuAssClients.end();++sit)
+        for(set<size_t>::const_iterator sit = pBMapCurr->msuAssClients.begin();sit!=pBMapCurr->msuAssClients.end();++sit)
             cout << *sit << endl;
         cout << "Associated pCCs:" << endl;
         for(set<ccptr>::const_iterator sit = spCCC.begin();sit!=spCCC.end();++sit)
@@ -99,12 +75,12 @@ MapMerger::mapptr MapMerger::MergeMaps(mapptr pMapCurr, mapptr pMapMatch, vector
         throw estd::infrastructure_ex();
     }
 
-    if(spCCM.size() != pMapMatch->msuAssClients.size())
+    if(spCCM.size() != pBMapMatch->msuAssClients.size())
     {
-        cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMerger::MergeMaps()\": spCCM.size() != pMapMatch->msuAssClients.size()" << endl;
-        cout << "Map id: " << pMapMatch->mMapId << endl;
+        cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMerger::MergeMaps()\": spCCM.size() != pBMapMatch->msuAssClients.size()" << endl;
+        cout << "Map id: " << pBMapMatch->mBMapId << endl;
         cout << "Associated client IDs:" << endl;
-        for(set<size_t>::const_iterator sit = pMapMatch->msuAssClients.begin();sit!=pMapMatch->msuAssClients.end();++sit)
+        for(set<size_t>::const_iterator sit = pBMapMatch->msuAssClients.begin();sit!=pBMapMatch->msuAssClients.end();++sit)
             cout << *sit << endl;
         cout << "Associated pCCs:" << endl;
         for(set<ccptr>::const_iterator sit = spCCM.begin();sit!=spCCM.end();++sit)
@@ -118,12 +94,12 @@ MapMerger::mapptr MapMerger::MergeMaps(mapptr pMapCurr, mapptr pMapMatch, vector
 
         cout << "spCCC: pCC->mClientId: " << pCC->mClientId << endl;
 
-        if(pCC->mClientId > 3) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMerger::MergeMaps()\": associated ClientId out of bounds (" << pCC->mClientId << ")" << endl;
-        if(!(pMapCurr->msuAssClients.count(pCC->mClientId))) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMerger::MergeMaps()\": associated ClientId in pCC but not in msuAssClients" << endl;
+        if(pCC->mClientId > 3) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"BMapMerger::BMergeMaps()\": associated ClientId out of bounds (" << pCC->mClientId << ")" << endl;
+        if(!(pBMapCurr->msuAssClients.count(pCC->mClientId))) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMerger::MergeMaps()\": associated ClientId in pCC but not in msuAssClients" << endl;
         switch(pCC->mClientId)
         {
             case(static_cast<size_t>(0)):
-                if(b0) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMerger::MergeMaps()\": associated ClientId found twice" << endl;
+                if(b0) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"BMapMerger::BMergeMaps()\": associated ClientId found twice" << endl;
                 b0 = true;
                 while(!pCC->LockComm()){usleep(params::timings::miLockSleep);}
                 #ifdef LOGGING
@@ -133,7 +109,7 @@ MapMerger::mapptr MapMerger::MergeMaps(mapptr pMapCurr, mapptr pMapMatch, vector
                 while(!pCC->LockPlaceRec()){usleep(params::timings::miLockSleep);}
                 break;
             case(static_cast<size_t>(1)):
-                if(b1) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMerger::MergeMaps()\": associated ClientId found twice" << endl;
+                if(b1) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"BMapMerger::BMergeMaps()\": associated ClientId found twice" << endl;
                 b1 = true;
                 while(!pCC->LockComm()){usleep(params::timings::miLockSleep);}
                 #ifdef LOGGING
@@ -143,7 +119,7 @@ MapMerger::mapptr MapMerger::MergeMaps(mapptr pMapCurr, mapptr pMapMatch, vector
                 while(!pCC->LockPlaceRec()){usleep(params::timings::miLockSleep);}
                 break;
             case(static_cast<size_t>(2)):
-                if(b2) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMerger::MergeMaps()\": associated ClientId found twice" << endl;
+                if(b2) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"BMapMerger::BMergeMaps()\": associated ClientId found twice" << endl;
                 b2 = true;
                 while(!pCC->LockComm()){usleep(params::timings::miLockSleep);}
                 #ifdef LOGGING
@@ -153,7 +129,7 @@ MapMerger::mapptr MapMerger::MergeMaps(mapptr pMapCurr, mapptr pMapMatch, vector
                 while(!pCC->LockPlaceRec()){usleep(params::timings::miLockSleep);}
                 break;
             case(static_cast<size_t>(3)):
-                if(b3) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMerger::MergeMaps()\": associated ClientId found twice" << endl;
+                if(b3) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"BMapMerger::BMergeMaps()\": associated ClientId found twice" << endl;
                 b3 = true;
                 while(!pCC->LockComm()){usleep(params::timings::miLockSleep);}
                 #ifdef LOGGING
@@ -162,7 +138,7 @@ MapMerger::mapptr MapMerger::MergeMaps(mapptr pMapCurr, mapptr pMapMatch, vector
                 while(!pCC->LockMapping()){usleep(params::timings::miLockSleep);}
                 while(!pCC->LockPlaceRec()){usleep(params::timings::miLockSleep);}
                 break;
-            default: cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMerger::MergeMaps()\": associated ClientId out of bounds" << endl;
+            default: cout << "\033[1;31m!!! ERROR !!!\033[0m In \"BMapMerger::BMergeMaps()\": associated ClientId out of bounds" << endl;
         }
     }
 
@@ -176,39 +152,39 @@ MapMerger::mapptr MapMerger::MergeMaps(mapptr pMapCurr, mapptr pMapMatch, vector
 
         cout << "spCCM: pCC->mClientId: " << pCC->mClientId << endl;
 
-        if(pCC->mClientId > 3) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMerger::MergeMaps()\": associated ClientId out of bounds (" << pCC->mClientId << ")" << endl;
-        if(!(pMapMatch->msuAssClients.count(pCC->mClientId))) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMerger::MergeMaps()\": associated ClientId in pCC but not in msuAssClients" << endl;
+        if(pCC->mClientId > 3) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"BMapMerger::BMergeMaps()\": associated ClientId out of bounds (" << pCC->mClientId << ")" << endl;
+        if(!(pBMapMatch->msuAssClients.count(pCC->mClientId))) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMerger::MergeMaps()\": associated ClientId in pCC but not in msuAssClients" << endl;
         switch(pCC->mClientId)
         {
             case(static_cast<size_t>(0)):
-                if(b0) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMerger::MergeMaps()\": associated ClientId found twice" << endl;
+                if(b0) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"BMapMerger::BMergeMaps()\": associated ClientId found twice" << endl;
                 b0 = true;
                 while(!pCC->LockComm()){usleep(params::timings::miLockSleep);}
                 while(!pCC->LockMapping()){usleep(params::timings::miLockSleep);}
                 while(!pCC->LockPlaceRec()){usleep(params::timings::miLockSleep);}
                 break;
             case(static_cast<size_t>(1)):
-                if(b1) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMerger::MergeMaps()\": associated ClientId found twice" << endl;
+                if(b1) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"BMapMerger::BMergeMaps()\": associated ClientId found twice" << endl;
                 b1 = true;
                 while(!pCC->LockComm()){usleep(params::timings::miLockSleep);}
                 while(!pCC->LockMapping()){usleep(params::timings::miLockSleep);}
                 while(!pCC->LockPlaceRec()){usleep(params::timings::miLockSleep);}
                 break;
             case(static_cast<size_t>(2)):
-                if(b2) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMerger::MergeMaps()\": associated ClientId found twice" << endl;
+                if(b2) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"BMapMerger::BMergeMaps()\": associated ClientId found twice" << endl;
                 b2 = true;
                 while(!pCC->LockComm()){usleep(params::timings::miLockSleep);}
                 while(!pCC->LockMapping()){usleep(params::timings::miLockSleep);}
                 while(!pCC->LockPlaceRec()){usleep(params::timings::miLockSleep);}
                 break;
             case(static_cast<size_t>(3)):
-                if(b3) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMerger::MergeMaps()\": associated ClientId found twice" << endl;
+                if(b3) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"BMapMerger::BMergeMaps()\": associated ClientId found twice" << endl;
                 b3 = true;
                 while(!pCC->LockComm()){usleep(params::timings::miLockSleep);}
                 while(!pCC->LockMapping()){usleep(params::timings::miLockSleep);}
                 while(!pCC->LockPlaceRec()){usleep(params::timings::miLockSleep);}
                 break;
-            default: cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMerger::MergeMaps()\": associated ClientId out of bounds" << endl;
+            default: cout << "\033[1;31m!!! ERROR !!!\033[0m In \"BMapMerger::BMergeMaps()\": associated ClientId out of bounds" << endl;
         }
     }
 
@@ -218,8 +194,8 @@ MapMerger::mapptr MapMerger::MergeMaps(mapptr pMapCurr, mapptr pMapMatch, vector
 
     // Get Map Mutex
     // Lock all mutexes
-    while(!pMapCurr->LockMapUpdate()){usleep(params::timings::miLockSleep);}
-    while(!pMapMatch->LockMapUpdate()){usleep(params::timings::miLockSleep);}
+    while(!pBMapCurr->LockBMapUpdate()){usleep(params::timings::miLockSleep);}
+    while(!pBMapMatch->LockBMapUpdate()){usleep(params::timings::miLockSleep);}
 
     for(set<ccptr>::iterator sit = spCCC.begin();sit!=spCCC.end();++sit)
     {
@@ -231,103 +207,104 @@ MapMerger::mapptr MapMerger::MergeMaps(mapptr pMapCurr, mapptr pMapMatch, vector
         (*sit)->mbOptActive = true;
     }
 
-    if(pMapCurr == nullptr || pMapMatch == nullptr)
+    if(pBMapCurr == nullptr || pBMapMatch == nullptr)
     {
-        cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMerger::MergeMaps\": at least one map is nullptr" << endl;
+        cout << "\033[1;31m!!! ERROR !!!\033[0m In \"BMapMerger::BMergeMaps\": at least one Bmap is nullptr" << endl;
         this->SetIdle();
         return nullptr;
     }
 
     //create new map
-    mapptr pFusedMap{new Map(pMapMatch,pMapCurr)};
-    while(!pFusedMap->LockMapUpdate()){usleep(params::timings::miLockSleep);}
-    pFusedMap->UpdateAssociatedData();
+    bmapptr pFusedBMap{new BundledMap(pBMapMatch,pBMapCurr)};
+    while(!pFusedBMap->LockBMapUpdate()){usleep(params::timings::miLockSleep);}
+    pFusedBMap->UpdateAssociatedData();
 
-    size_t IdC = vMatchHits[0].mpKFCurr->mId.second;
-    size_t IdM = vMatchHits[0].mpKFMatch->mId.second;
+    size_t IdC = vMatchHits[0].mpBKFCurr->mId.second;
+    size_t IdM = vMatchHits[0].mpBKFMatch->mId.second;
 
     g2o::Sim3 g2oS_wm_wc; //world match - world curr
 
     //optimize
-    idpair nLoopKf;
+    idpair nLoopBKf;
 
     int idx = 0;
-    kfptr pKFCur = vMatchHits[idx].mpKFCurr;
-    kfptr pKFMatch = vMatchHits[idx].mpKFMatch;
+    bkfptr pBKFCur = vMatchHits[idx].mpBKFCurr;
+    bkfptr pBKFMatch = vMatchHits[idx].mpBKFMatch;
     g2o::Sim3 g2oScw = vMatchHits[idx].mg2oScw;
     std::vector<mpptr> vpCurrentMatchedPoints = vMatchHits[idx].mvpCurrentMatchedPoints;
     std::vector<mpptr> vpLoopMapPoints = vMatchHits[idx].mvpLoopMapPoints;
 
-    vector<kfptr> vpKeyFramesCurr = pMapCurr->GetAllKeyFrames();
+    vector<bkfptr> vpBundledKeyFramesCurr = pBMapCurr->GetAllBundledKeyFrames();
 
-    if(IdC != pKFCur->mId.second || IdM != pKFMatch->mId.second)
-        cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMerger::MergeMaps\": client ID mismatch" << endl;
+    if(IdC != pBKFCur->mId.second || IdM != pBKFMatch->mId.second)
+        cout << "\033[1;31m!!! ERROR !!!\033[0m In \"BMapMerger::BMergeMaps\": client ID mismatch" << endl;
 
-    // Ensure current keyframe is updated
-    pKFCur->UpdateConnections();
+    // Ensure current Bundledkeyframe is updated
+    pBKFCur->UpdateConnections();
 
     // Retrive keyframes connected to the current keyframe and compute corrected Sim3 pose by propagation
-    mvpCurrentConnectedKFs = pKFCur->GetVectorCovisibleKeyFrames();
-    mvpCurrentConnectedKFs.push_back(pKFCur);
+    mvpCurrentConnectedBKFs = pBKFCur->GetVectorCovisibleBundledKeyFrames();
+    mvpCurrentConnectedBKFs.push_back(pBKFCur);
 
-    nLoopKf = pKFCur->mId;
+    nLoopBKf = pBKFCur->mId;
 
-    KeyFrameAndPose CorrectedSim3, NonCorrectedSim3;
-    CorrectedSim3[pKFCur]=g2oScw;
-    cv::Mat Twc = pKFCur->GetPoseInverse();
+    BundledKeyFrameAndPose CorrectedSim3, NonCorrectedSim3;
+    CorrectedSim3[pBKFCur]=g2oScw;
+    cv::Mat Twc = pBKFCur->GetPoseInverse();
 
     {
         cv::Mat Rwc = Twc.rowRange(0,3).colRange(0,3);
         cv::Mat twc = Twc.rowRange(0,3).col(3);
         g2o::Sim3 g2oSwc(Converter::toMatrix3d(Rwc),Converter::toVector3d(twc),1.0);
-        g2oS_wm_wc = (g2oScw.inverse())*(g2oSwc.inverse());
+        g2oS_wm_wc = (g2oScw.inverse())*(g2oSwc.inverse()); //todo
     }
 
-    KeyFrameAndPose CorrectedSim3All, NonCorrectedSim3All;
-    CorrectedSim3All[pKFCur]=g2oScw;
+    BundledKeyFrameAndPose CorrectedSim3All, NonCorrectedSim3All;
+    CorrectedSim3All[pBKFCur]=g2oScw;
 
-    for(vector<kfptr>::iterator vit=mvpCurrentConnectedKFs.begin(), vend=mvpCurrentConnectedKFs.end(); vit!=vend; vit++)
+    for(vector<bkfptr>::iterator vit=mvpCurrentConnectedBKFs.begin(), vend=mvpCurrentConnectedBKFs.end(); vit!=vend; vit++)
     {
-        kfptr pKFi = *vit;
+        bkfptr pBKFi = *vit;
 
-        cv::Mat Tiw = pKFi->GetPose();
+        cv::Mat Tiw = pBKFi->GetPose();
 
-        if(pKFi!=pKFCur)
+        if(pBKFi!=pBKFCur)
         {
             cv::Mat Tic = Tiw*Twc;
             cv::Mat Ric = Tic.rowRange(0,3).colRange(0,3);
             cv::Mat tic = Tic.rowRange(0,3).col(3);
             g2o::Sim3 g2oSic(Converter::toMatrix3d(Ric),Converter::toVector3d(tic),1.0);
-            g2o::Sim3 g2oCorrectedSiw = g2oSic*g2oScw;
+            g2o::Sim3 g2oCorrectedSiw = g2oSic*g2oScw;  //todo 
             //Pose corrected with the Sim3 of the loop closure
-            CorrectedSim3[pKFi]=g2oCorrectedSiw;
+            CorrectedSim3[pBKFi]=g2oCorrectedSiw;
         }
 
         cv::Mat Riw = Tiw.rowRange(0,3).colRange(0,3);
         cv::Mat tiw = Tiw.rowRange(0,3).col(3);
         g2o::Sim3 g2oSiw(Converter::toMatrix3d(Riw),Converter::toVector3d(tiw),1.0);
         //Pose without correction
-        NonCorrectedSim3[pKFi]=g2oSiw;
+        NonCorrectedSim3[pBKFi]=g2oSiw;
     }
-
-    for(vector<kfptr>::iterator vit = vpKeyFramesCurr.begin();vit!=vpKeyFramesCurr.end();++vit)
+    
+    //all bundledkeyframe in the current bmap
+    for(vector<bkfptr>::iterator vit = vpBundledKeyFramesCurr.begin();vit!=vpBundledKeyFramesCurr.end();++vit)
     {
-        kfptr pKFi = *vit;
+        bkfptr pBKFi = *vit;
 
-        KeyFrameAndPose::const_iterator it = CorrectedSim3.find(pKFi);
+        BundledKeyFrameAndPose::const_iterator it = CorrectedSim3.find(pBKFi);
 
         if(it!=CorrectedSim3.end())
         {
-            CorrectedSim3All[pKFi] = it->second;
+            CorrectedSim3All[pBKFi] = it->second;
 
-            KeyFrameAndPose::const_iterator it2 = NonCorrectedSim3.find(pKFi);
+            BundledKeyFrameAndPose::const_iterator it2 = NonCorrectedSim3.find(pBKFi);
             if(it2==NonCorrectedSim3.end()) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMerger::MergeMaps\": Siw for KF in CorrectedSim3 but not in NonCorrectedSim3" << endl;
 
-            NonCorrectedSim3All[pKFi] = NonCorrectedSim3[pKFi];
+            NonCorrectedSim3All[pBKFi] = NonCorrectedSim3[pBKFi];
         }
         else
         {
-            cv::Mat Tiw = pKFi->GetPose();
+            cv::Mat Tiw = pBKFi->GetPose();
             //CorrectedSim3All
             cv::Mat Tic = Tiw*Twc;
             cv::Mat Ric = Tic.rowRange(0,3).colRange(0,3);
@@ -335,26 +312,26 @@ MapMerger::mapptr MapMerger::MergeMaps(mapptr pMapCurr, mapptr pMapMatch, vector
             g2o::Sim3 g2oSic(Converter::toMatrix3d(Ric),Converter::toVector3d(tic),1.0);
             g2o::Sim3 g2oCorrectedSiw = g2oSic*g2oScw;
             //Pose corrected with the Sim3 of the loop closure
-            CorrectedSim3All[pKFi]=g2oCorrectedSiw;
+            CorrectedSim3All[pBKFi]=g2oCorrectedSiw;
             //NonCorrectedSim3All
             cv::Mat Riw = Tiw.rowRange(0,3).colRange(0,3);
             cv::Mat tiw = Tiw.rowRange(0,3).col(3);
             g2o::Sim3 g2oSiw(Converter::toMatrix3d(Riw),Converter::toVector3d(tiw),1.0);
             //Pose without correction
-            NonCorrectedSim3All[pKFi]=g2oSiw;
+            NonCorrectedSim3All[pBKFi]=g2oSiw;
         }
     }
 
-    // Correct MapPoints and KeyFrames of current map
-    for(KeyFrameAndPose::iterator mit=CorrectedSim3All.begin(), mend=CorrectedSim3All.end(); mit!=mend; mit++)
+    // Correct MapPoints and BundledKeyFrame of current map
+    for(BundledKeyFrameAndPose::iterator mit=CorrectedSim3All.begin(), mend=CorrectedSim3All.end(); mit!=mend; mit++)
     {
-        kfptr pKFi = mit->first;
+        bkfptr pBKFi = mit->first;
         g2o::Sim3 g2oCorrectedSiw = mit->second;
         g2o::Sim3 g2oCorrectedSwi = g2oCorrectedSiw.inverse();
 
-        g2o::Sim3 g2oSiw =NonCorrectedSim3All[pKFi];
+        g2o::Sim3 g2oSiw =NonCorrectedSim3All[pBKFi];
 
-        vector<mpptr> vpMPsi = pKFi->GetMapPointMatches();
+        vector<mpptr> vpMPsi = pBKFi->GetMapPointMatches();
         for(size_t iMP=0, endMPi = vpMPsi.size(); iMP<endMPi; iMP++)
         {
             mpptr pMPi = vpMPsi[iMP];
@@ -362,22 +339,24 @@ MapMerger::mapptr MapMerger::MergeMaps(mapptr pMapCurr, mapptr pMapMatch, vector
                 continue;
             if(pMPi->isBad())
                 continue;
-            if(pMPi->mCorrectedByKF_MM==pKFCur->mId)
+            if(pMPi->mCorrectedByBKF_MM==pBKFCur->mId)
                 continue;
 
             // Project with non-corrected pose and project back with corrected pose
+            // 将该未校正的eigP3Dw先从世界坐标系映射到未校正的pKFi相机坐标系，然后再反映射到校正后的世界坐标系下
             cv::Mat P3Dw = pMPi->GetWorldPos();
             Eigen::Matrix<double,3,1> eigP3Dw = Converter::toVector3d(P3Dw);
             Eigen::Matrix<double,3,1> eigCorrectedP3Dw = g2oCorrectedSwi.map(g2oSiw.map(eigP3Dw));
 
             cv::Mat cvCorrectedP3Dw = Converter::toCvMat(eigCorrectedP3Dw);
             pMPi->SetWorldPos(cvCorrectedP3Dw,true);
-            pMPi->mCorrectedByKF_MM = pKFCur->mId;
-            pMPi->mCorrectedReference_MM = pKFCur->mUniqueId;
-            pMPi->UpdateNormalAndDepth();
+            pMPi->mCorrectedByBKF_MM = pBKFCur->mId;
+            pMPi->mCorrectedReference_MM = pBKFCur->mUniqueId;
+            pMPi->UpdateNormalAndDepthPlus();
         }
 
         // Update keyframe pose with corrected Sim3. First transform Sim3 to SE3 (scale translation)
+        // 步骤2.3：将Sim3转换为SE3，根据更新的Sim3，更新关键帧的位姿
         Eigen::Matrix3d eigR = g2oCorrectedSiw.rotation().toRotationMatrix();
         Eigen::Vector3d eigt = g2oCorrectedSiw.translation();
         double s = g2oCorrectedSiw.scale();
@@ -386,45 +365,45 @@ MapMerger::mapptr MapMerger::MergeMaps(mapptr pMapCurr, mapptr pMapMatch, vector
 
         cv::Mat correctedTiw = Converter::toCvSE3(eigR,eigt);
 
-        pKFi->SetPose(correctedTiw,true);
+        pBKFi->SetPose(correctedTiw,true);
 
         // Make sure connections are updated
-        pKFi->UpdateConnections();
+        pBKFi->UpdateConnections();
 
-        pKFi->mCorrected_MM = pKFCur->mId;
+        pBKFi->mCorrected_MM = pBKFCur->mId;
     }
 
-    map<idpair,kfptr>  mpErasedKFs = pMapCurr->GetMmpErasedKeyFrames();
-    map<idpair,mpptr>  mpErasedMPs = pMapCurr->GetMmpErasedMapPoints();
+    map<idpair,bkfptr>  mpErasedBKFs = pBMapCurr->GetMmpErasedBundledKeyFrames();
+    map<idpair,mpptr>  mpErasedMPs = pBMapCurr->GetMmpErasedMapPoints();
 
-    for(map<idpair,kfptr>::iterator mitEr = mpErasedKFs.begin();mitEr != mpErasedKFs.end();++mitEr)
+    for(map<idpair,bkfptr>::iterator mitEr = mpErasedBKFs.begin();mitEr != mpErasedBKFs.end();++mitEr)
     {
-        kfptr pKFi = mitEr->second;
+        bkfptr pBKFi = mitEr->second;
 
-        if(!pKFi)
+        if(!pBKFi)
         {
-            cout << "\033[1;33m!!! WARN !!!\033[0m " << __func__ << ":" << __LINE__ << ": KF is nullptr" << endl;
+            cout << "\033[1;33m!!! WARN !!!\033[0m " << __func__ << ":" << __LINE__ << ": BKF is nullptr" << endl;
             continue;
         }
 
-        if(!pKFi->isBad())
-            cout << "\033[1;33m!!! WARN !!!\033[0m " << __func__ << ":" << __LINE__ << ": KF is erased, but !bad" << endl;
+        if(!pBKFi->isBad())
+            cout << "\033[1;33m!!! WARN !!!\033[0m " << __func__ << ":" << __LINE__ << ": BKF is erased, but !bad" << endl;
 
-        if(pKFi->mCorrected_MM == pKFCur->mId)
+        if(pBKFi->mCorrected_MM == pBKFCur->mId)
         {
-            cout << "\033[1;33m!!! WARN !!!\033[0m " << __func__ << ":" << __LINE__ << ": KF already corrected" << endl;
+            cout << "\033[1;33m!!! WARN !!!\033[0m " << __func__ << ":" << __LINE__ << ": BKF already corrected" << endl;
             continue;
         }
 
-        kfptr pP = pKFi->GetParent();
-        cv::Mat Tcp = pKFi->mTcp;
+        bkfptr pP = pBKFi->GetParent();
+        cv::Mat Tcp = pBKFi->mTcp;
         while(pP->isBad())
         {
             Tcp = pP->mTcp;
             pP = pP->GetParent();
         }
 
-        pKFi->mCorrected_MM = pKFCur->mId;
+        pBKFi->mCorrected_MM = pBKFCur->mId;
     }
 
     for(map<idpair,mpptr>::iterator mitEr = mpErasedMPs.begin();mitEr != mpErasedMPs.end();++mitEr)
@@ -440,7 +419,7 @@ MapMerger::mapptr MapMerger::MergeMaps(mapptr pMapCurr, mapptr pMapMatch, vector
         if(!pMPi->isBad())
             cout << "\033[1;33m!!! WARN !!!\033[0m " << __func__ << ":" << __LINE__ << ": MP is erased, but !bad" << endl;
 
-        if(pMPi->mCorrectedByKF_MM == pKFCur->mId)
+        if(pMPi->mCorrectedByBKF_MM == pBKFCur->mId)
         {
             cout << "\033[1;33m!!! WARN !!!\033[0m " << __func__ << ":" << __LINE__ << ": MP already corrected" << endl;
             continue;
@@ -451,20 +430,21 @@ MapMerger::mapptr MapMerger::MergeMaps(mapptr pMapCurr, mapptr pMapMatch, vector
 
     // Start Loop Fusion
     // Update matched map points and replace if duplicated
+     // 步骤3：检查当前帧的MapPoints与闭环匹配帧的MapPoints是否存在冲突，对冲突的MapPoints进行替换或填补
     for(size_t i=0; i<vpCurrentMatchedPoints.size(); i++)
     {
         if(vpCurrentMatchedPoints[i])
         {
             mpptr pLoopMP = vpCurrentMatchedPoints[i];
-            mpptr pCurMP = pKFCur->GetMapPoint(i);
+            mpptr pCurMP = pBKFCur->GetMapPoint(i);
             if(pCurMP)
             {
                 pCurMP->ReplaceAndLock(pLoopMP);
             }
             else
             {
-                pKFCur->AddMapPoint(pLoopMP,i,true); //lock this MapPoint
-                pLoopMP->AddObservation(pKFCur,i,true);
+                pBKFCur->AddMapPoint(pLoopMP,i,true); //lock this MapPoint
+                pLoopMP->AddBKFsObservation(pBKFCur,i,pBKFCur->cameraNum,true);
                 pLoopMP->ComputeDistinctiveDescriptors();
             }
         }
@@ -473,46 +453,52 @@ MapMerger::mapptr MapMerger::MergeMaps(mapptr pMapCurr, mapptr pMapMatch, vector
     // Project MapPoints observed in the neighborhood of the loop keyframe
     // into the current keyframe and neighbors using corrected poses.
     // Fuse duplications.
+    // 步骤4：通过将闭环时相连关键帧的mvpLoopMapPoints投影到这些关键帧中，进行MapPoints检查与替换
     SearchAndFuse(CorrectedSim3,vpLoopMapPoints);
 
     // After the MapPoint fusion, new links in the covisibility graph will appear attaching both sides of the loop
-    map<kfptr, set<kfptr> > LoopConnections;
+    // 步骤5：更新当前关键帧之间的共视相连关系，得到因闭环时MapPoints融合而新得到的连接关系
+    map<bkfptr, set<bkfptr> > LoopConnections;
 
-    for(vector<kfptr>::iterator vit=mvpCurrentConnectedKFs.begin(), vend=mvpCurrentConnectedKFs.end(); vit!=vend; vit++)
+    for(vector<bkfptr>::iterator vit=mvpCurrentConnectedBKFs.begin(), vend=mvpCurrentConnectedBKFs.end(); vit!=vend; vit++)
     {
-        kfptr pKFi = *vit;
-        vector<kfptr> vpPreviousNeighbors = pKFi->GetVectorCovisibleKeyFrames();
+        bkfptr pBKFi = *vit;
+        vector<bkfptr> vpPreviousNeighbors = pBKFi->GetVectorCovisibleBundledKeyFrames();
 
         // Update connections. Detect new links.
-        pKFi->UpdateConnections();
-        LoopConnections[pKFi]=pKFi->GetConnectedKeyFrames();
-        for(vector<kfptr>::iterator vit_prev=vpPreviousNeighbors.begin(), vend_prev=vpPreviousNeighbors.end(); vit_prev!=vend_prev; vit_prev++)
+        pBKFi->UpdateConnections();
+        LoopConnections[pBKFi]=pBKFi->GetConnectedBundledKeyFrames();
+        for(vector<bkfptr>::iterator vit_prev=vpPreviousNeighbors.begin(), vend_prev=vpPreviousNeighbors.end(); vit_prev!=vend_prev; vit_prev++)
         {
-            LoopConnections[pKFi].erase(*vit_prev);
+            LoopConnections[pBKFi].erase(*vit_prev);
         }
-        for(vector<kfptr>::iterator vit2=mvpCurrentConnectedKFs.begin(), vend2=mvpCurrentConnectedKFs.end(); vit2!=vend2; vit2++)
+        //从连接关系中去除闭环之前的一级连接关系，剩下的连接就是由闭环得到的连接关系
+        for(vector<bkfptr>::iterator vit2=mvpCurrentConnectedBKFs.begin(), vend2=mvpCurrentConnectedBKFs.end(); vit2!=vend2; vit2++)
         {
-            LoopConnections[pKFi].erase(*vit2);
+            LoopConnections[pBKFi].erase(*vit2);
         }
     }
 
     // Optimize graph
-    Optimizer::OptimizeEssentialGraphMapFusion(pFusedMap, pKFMatch, pKFCur, LoopConnections, false);
+    // 步骤6：进行EssentialGraph优化，LoopConnections是形成闭环后新生成的连接关系，不包括步骤7中当前帧与闭环匹配帧之间的连接关系
+    //Optimizer::OptimizeEssentialGraphMapFusion(pFusedBMap, pBKFMatch, pBKFCur, LoopConnections, false);
 
-    // Add loop edge
-    pKFMatch->AddLoopEdge(pKFCur);
-    pKFCur->AddLoopEdge(pKFMatch);
+    // Add loop edge]
+     // 步骤7：添加当前帧与闭环匹配帧之间的边（这个连接关系不优化）
+    // 这两句话应该放在OptimizeEssentialGraph之前，因为OptimizeEssentialGraph的步骤4.2中有优化
+    pBKFMatch->AddLoopEdge(pBKFCur);
+    pBKFCur->AddLoopEdge(pBKFMatch);
 
     cout << "Essential graph optimized" << endl;
 
-    cout << ">>>>> MapMerger::MergeMaps --> Global Bundle Adjustment" << endl;
+    cout << ">>>>> BMapMerger::BMergeMaps --> Global Bundle Adjustment" << endl;
 
-    pFusedMap->setRunningGBA();
-    pFusedMap->setFinishedGBA();
-    pFusedMap->mbStopGBA = false;
+    pFusedBMap->setRunningGBA();
+    pFusedBMap->setFinishedGBA();
+    pFusedBMap->mbStopGBA = false;
 
     #ifdef DONOTINTERRUPTMERGE
-    pFusedMap->setMergeStepGBA();
+    pFusedBMap->setMergeStepGBA();
     #endif
 
     #ifdef DEBUGGING2
@@ -521,63 +507,63 @@ MapMerger::mapptr MapMerger::MergeMaps(mapptr pMapCurr, mapptr pMapMatch, vector
 
     // Launch a new thread to perform Global Bundle Adjustment
     cout << "--- Launch GBA thread" << endl;
-    pFusedMap->mpThreadGBA = new thread(&MapMerger::RunGBA,this,nLoopKf,pFusedMap);
+    pFusedBMap->mpThreadGBA = new thread(&BMapMerger::RunGBA,this,nLoopKf,pFusedMap); //todo
 
     cout << "\033[1;32;41m!!! MAPS MERGED !!!\033[0m" << endl;
     this->SetIdle();
 
     //delete old maps and set new ones in threads
 
-    pMapCurr->SetOutdated();
-    pMapMatch->SetOutdated();
+    pBMapCurr->SetOutdated();
+    pBMapMatch->SetOutdated();
 
-    set<ccptr> spCCF = pFusedMap->GetCCPtrs();
+    set<ccptr> spCCF = pFusedBMap->GetCCPtrs();
     for(set<ccptr>::iterator sit = spCCF.begin();sit!=spCCF.end();++sit)
     {
         ccptr pCC = *sit;
         chptr pCH = pCC->mpCH;
         if(spCCC.count(pCC))
         {
-            pCH->ChangeMap(pFusedMap,g2oS_wm_wc);
+            pCH->ChangeBMap(pFusedBMap,g2oS_wm_wc);
             pCC->mbGotMerged = true;
         }
         else
         {
-            pCH->ChangeMap(pFusedMap,g2o::Sim3());
-            pCH->ClearCovGraph(pMapCurr->mMapId);
+            pCH->ChangeBMap(pFusedBMap,g2o::Sim3());
+            //pCH->ClearCovGraph(pBMapCurr->mBMapId); //todo visulization
         }
         pCC->UnLockComm();
         pCC->UnLockPlaceRec();
     }
 
-    pMapCurr->UnLockMapUpdate();
-    pMapMatch->UnLockMapUpdate();
-    pFusedMap->UnLockMapUpdate();
+    pBMapCurr->UnLockBMapUpdate();
+    pBMapMatch->UnLockBMapUpdate();
+    pFusedBMap->UnLockBMapUpdate();
 
-    pMapCurr->unsetNoStartGBA();
-    pMapMatch->unsetNoStartGBA();
-    pFusedMap->unsetNoStartGBA();
+    pBMapCurr->unsetNoStartGBA();
+    pBMapMatch->unsetNoStartGBA();
+    pFusedBMap->unsetNoStartGBA();
 
     #ifdef LOGGING
     pCClog->mpLogger->SetMerge(__LINE__,0);
     #endif
 
-    return pFusedMap;
+    return pFusedBMap;
 }
-
-void MapMerger::SearchAndFuse(const KeyFrameAndPose &CorrectedPosesMap, std::vector<mpptr> vpLoopMapPoints)
+// 通过将闭环时相连关键帧的MapPoints投影到这些关键帧中，进行MapPoints检查与替换
+void BMapMerger::SearchAndFuse(const BundledKeyFrameAndPose &CorrectedPosesBMap, std::vector<mpptr> vpLoopMapPoints)
 {
     ORBmatcher matcher(0.8);
 
-    for(KeyFrameAndPose::const_iterator mit=CorrectedPosesMap.begin(), mend=CorrectedPosesMap.end(); mit!=mend;mit++)
+    for(BundledKeyFrameAndPose::const_iterator mit=CorrectedPosesBMap.begin(), mend=CorrectedPosesBMap.end(); mit!=mend;mit++)
     {
-        kfptr pKF = mit->first;
+        bkfptr pBKF = mit->first;
 
         g2o::Sim3 g2oScw = mit->second;
         cv::Mat cvScw = Converter::toCvMat(g2oScw);
 
         vector<mpptr> vpReplacePoints(vpLoopMapPoints.size(),nullptr);
-        matcher.Fuse(pKF,cvScw,vpLoopMapPoints,4,vpReplacePoints);
+        matcher.Fuse(pBKF,cvScw,vpLoopMapPoints,4,vpReplacePoints);
 
         const int nLP = vpLoopMapPoints.size();
         for(int i=0; i<nLP;i++)
@@ -591,39 +577,39 @@ void MapMerger::SearchAndFuse(const KeyFrameAndPose &CorrectedPosesMap, std::vec
     }
 }
 
-void MapMerger::SetBusy()
+void BMapMerger::SetBusy()
 {
     unique_lock<mutex> lock(mMutexBusy);
     bIsBusy = true;
 }
 
-void MapMerger::SetIdle()
+void BMapMerger::SetIdle()
 {
     unique_lock<mutex> lock(mMutexBusy);
     bIsBusy = false;
 }
 
-bool MapMerger::isBusy()
+bool BMapMerger::isBusy()
 {
     unique_lock<mutex> lock(mMutexBusy);
     return bIsBusy;
 }
 
-void MapMerger::RunGBA(idpair nLoopKf, mapptr pFusedMap)
+void BMapMerger::RunGBA(idpair nLoopBKf, bmapptr pFusedBMap)
 {
     cout << "-> Starting Global Bundle Adjustment" << endl;
 
-    Optimizer::MapFusionGBA(pFusedMap,pFusedMap->mMapId,params::opt::mGBAIterations,&(pFusedMap->mbStopGBA),nLoopKf,true);
+    Optimizer::BMapFusionGBA(pFusedBMap,pFusedBMap->mBMapId,params::opt::mGBAIterations,&(pFusedBMap->mbStopGBA),nLoopBKf,true);
 
-    set<ccptr> spCC = pFusedMap->GetCCPtrs();
+    set<ccptr> spCC = pFusedBMap->GetCCPtrs();
 
     #ifdef FINALBA
     if(!pFusedMap->mbStopGBA)
     #endif
     {
-        unique_lock<mutex> lock(pFusedMap->mMutexGBA);
+        unique_lock<mutex> lock(pFusedBMap->mMutexGBA);
 
-        while(!pFusedMap->LockMapUpdate()){usleep(params::timings::miLockSleep);}
+        while(!pFusedBMap->LockMapUpdate()){usleep(params::timings::miLockSleep);}
 
         cout << "-> Global Bundle Adjustment finished" << endl;
         cout << "-> Updating map ..." << endl;

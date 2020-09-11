@@ -41,6 +41,159 @@ BundledMap::BundledMap(ros::NodeHandle Nh, ros::NodeHandle NhPrivate, size_t BMa
     cout << "+++++ BMap " << mBMapId << " Initialized +++++" << endl;
 }
 
+BundledMap::BundledMap(const bmapptr &pBMapTarget, const bmapptr &pBMapToFuse)
+    : mNh(pBMapTarget->mNh),mNhPrivate(pBMapTarget->mNhPrivate),
+      mBMapId(pBMapTarget->mBMapId),mbOutdated(false),
+      mbLockBMapUpdate(false),mbLockPointCreation(false)
+      ,mnLastBKfsIdUnique(pBMapToFuse->GetLastBKfIdUnique())
+    ,mbStopGBA(false),mbRunningGBA(false),mbFinishedGBA(false),
+    #ifdef FINALBA
+    mbGBAinterrupted(false),
+    #endif
+    mbNoStartGBA(false),mbStopGBAInProgress(false)
+    #ifdef DONOTINTERRUPTMERGE
+    ,mbMergeStepGBA(false)
+    #endif
+{
+
+    mSysState = pBMapTarget->mSysState;
+
+    string SysType;
+    if(mSysState == eSystemState::CLIENT)
+    {
+        SysType = "Client";
+    }
+    else if(mSysState == eSystemState::SERVER)
+    {
+        SysType = "Server";
+    }
+    else
+    {
+        cout << "\033[1;31m!!!!! ERROR !!!!!\033[0m Map::Map(): invalid systems state: " << mSysState << endl;
+        throw infrastructure_ex();
+    }
+
+    //data Map A
+    set<size_t> msuAssClientsA = pBMapTarget->msuAssClients;
+    set<size_t> msnFinishedAgentsA = pBMapTarget->msnFinishedAgents;
+    vector<bkfptr> mvpBundledKeyFrameOriginsA = pBMapTarget->mvpBundledKeyFramesOrigins;
+    long unsigned int mnMaxBKFidA = pBMapTarget->GetMaxBKFid();
+    long unsigned int mnMaxMPidA = pBMapTarget->GetMaxMPid();
+    long unsigned int mnMaxBKFidUniqueA = pBMapTarget->GetMaxBKFidUnique();
+    long unsigned int mnMaxMPidUniqueA = pBMapTarget->GetMaxMPidUnique();
+    std::map<idpair,mpptr> mmpMapPointsA = pBMapTarget->GetMmpMapPoints();
+    std::map<idpair,bkfptr> mmpBundledKeyFramesA = pBMapTarget->GetMmpBundledKeyFrames();
+    std::map<idpair,mpptr> mmpErasedMapPointsA = pBMapTarget->GetMmpErasedMapPoints();
+    std::map<idpair,bkfptr> mmpErasedBundledKeyFramesA = pBMapTarget->GetMmpErasedBundledKeyFrames();
+    set<ccptr> spCCA = pBMapTarget->GetCCPtrs();
+
+    //data Map B
+    set<size_t> msuAssClientsB = pBMapToFuse->msuAssClients;
+    set<size_t> msnFinishedAgentsB = pBMapToFuse->msnFinishedAgents;
+    vector<bkfptr> mvpBundledKeyFrameOriginsB = pBMapToFuse->mvpBundledKeyFramesOrigins;
+    long unsigned int mnMaxBKFidB = pBMapToFuse->GetMaxBKFid();
+    long unsigned int mnMaxMPidB = pBMapToFuse->GetMaxMPid();
+    long unsigned int mnMaxBKFidUniqueB = pBMapToFuse->GetMaxBKFidUnique();
+    long unsigned int mnMaxMPidUniqueB = pBMapToFuse->GetMaxMPidUnique();
+    std::map<idpair,mpptr> mmpMapPointsB = pBMapToFuse->GetMmpMapPoints();
+    std::map<idpair,bkfptr> mmpBundledKeyFramesB = pBMapToFuse->GetMmpBundledKeyFrames();
+    std::map<idpair,mpptr> mmpErasedMapPointsB = pBMapToFuse->GetMmpErasedMapPoints();
+    std::map<idpair,bkfptr> mmpErasedBundledKeyFramesB = pBMapToFuse->GetMmpErasedBundledKeyFrames();
+    set<ccptr> spCCB = pBMapToFuse->GetCCPtrs();
+
+    //fill new map
+    mOdomFrame = pBMapTarget->mOdomFrame;
+
+    msuAssClients.insert(msuAssClientsA.begin(),msuAssClientsA.end());
+    msuAssClients.insert(msuAssClientsB.begin(),msuAssClientsB.end());
+    msnFinishedAgents.insert(msnFinishedAgentsA.begin(),msnFinishedAgentsA.end());
+    msnFinishedAgents.insert(msnFinishedAgentsB.begin(),msnFinishedAgentsB.end());
+    mvpBundledKeyFramesOrigins.insert(mvpBundledKeyFramesOrigins.end(),mvpBundledKeyFrameOriginsA.begin(),mvpBundledKeyFrameOriginsA.end());
+    mvpBundledKeyFramesOrigins.insert(mvpBundledKeyFramesOrigins.end(),mvpBundledKeyFrameOriginsB.begin(),mvpBundledKeyFrameOriginsB.end());
+    mnMaxBKFsid = std::max(mnMaxBKFidA,mnMaxBKFidB);
+    mnMaxMPid = std::max(mnMaxMPidA,mnMaxMPidB);
+    mnMaxBKFsidUnique = std::max(mnMaxBKFidUniqueA,mnMaxBKFidUniqueB);
+    mnMaxMPidUnique = std::max(mnMaxMPidUniqueA,mnMaxMPidUniqueB);
+    mmpMapPoints.insert(mmpMapPointsA.begin(),mmpMapPointsA.end());
+    mmpMapPoints.insert(mmpMapPointsB.begin(),mmpMapPointsB.end());
+    mmpBundledKeyFrames.insert(mmpBundledKeyFramesA.begin(),mmpBundledKeyFramesA.end());
+    mmpBundledKeyFrames.insert(mmpBundledKeyFramesB.begin(),mmpBundledKeyFramesB.end());
+    mmpErasedMapPoints.insert(mmpErasedMapPointsA.begin(),mmpErasedMapPointsA.end());
+    mmpErasedMapPoints.insert(mmpErasedMapPointsB.begin(),mmpErasedMapPointsB.end());
+    mmpErasedBundledKeyFrames.insert(mmpErasedBundledKeyFramesA.begin(),mmpErasedBundledKeyFramesA.end());
+    mmpErasedBundledKeyFrames.insert(mmpErasedBundledKeyFramesB.begin(),mmpErasedBundledKeyFramesB.end());
+    mspCC.insert(spCCA.begin(),spCCA.end());
+    mspCC.insert(spCCB.begin(),spCCB.end());
+
+    #ifdef FINALBA
+    if(pBMapTarget->isGBAinterrupted() || pBMapToFuse->isGBAinterrupted())
+        this->mbGBAinterrupted = true;
+    #endif
+
+    for(set<ccptr>::const_iterator sit = mspCC.begin();sit!=mspCC.end();++sit)
+    {
+        ccptr pCC = *sit;
+        mspComm.insert(pCC->mpCH->GetCommPtr());
+    }
+
+    for(set<size_t>::iterator sit = msnFinishedAgentsA.begin();sit!=msnFinishedAgentsA.end();++sit)
+        cout << "Target BMap Finished Agents: " << *sit << endl;
+
+    for(set<size_t>::iterator sit = msnFinishedAgents.begin();sit!=msnFinishedAgents.end();++sit)
+        cout << "Merged BMap Finished Agents: " << *sit << endl;
+
+    //----------------------------
+}
+
+void BundledMap::UpdateAssociatedData()
+{
+
+    //replace associated maps
+    for(std::map<idpair,bkfptr>::iterator mit = mmpBundledKeyFrames.begin();mit!=mmpBundledKeyFrames.end();++mit)
+    {
+        bkfptr pBKF = mit->second;
+        pBKF->ReplaceBMap(this->shared_from_this());
+        for(set<commptr>::const_iterator sit2 = mspComm.begin();sit2!=mspComm.end();++sit2)
+        {
+            commptr pComm = *sit2;
+            pBKF->AddCommPtr(pComm);
+        }
+    }
+
+    for(std::map<idpair,mpptr>::iterator mit = mmpMapPoints.begin();mit!=mmpMapPoints.end();++mit)
+    {
+        mpptr pMP = mit->second;
+        pMP->ReplaceBMap(this->shared_from_this());
+        for(set<commptr>::const_iterator sit2 = mspComm.begin();sit2!=mspComm.end();++sit2)
+        {
+            commptr pComm = *sit2;
+            pMP->AddCommPtr(pComm);
+        }
+    }
+
+    for(map<idpair,bkfptr>::iterator mit = mmpErasedBundledKeyFrames.begin();mit!=mmpErasedBundledKeyFrames.end();++mit)
+    {
+        bkfptr pBKF = mit->second;
+        pBKF->ReplaceBMap(this->shared_from_this());
+        for(set<commptr>::const_iterator sit2 = mspComm.begin();sit2!=mspComm.end();++sit2)
+        {
+            commptr pComm = *sit2;
+            pBKF->AddCommPtr(pComm);
+        }
+    }
+
+    for(map<idpair,mpptr>::iterator mit = mmpErasedMapPoints.begin();mit!=mmpErasedMapPoints.end();++mit)
+    {
+        mpptr pMP = mit->second;
+        pMP->ReplaceBMap(this->shared_from_this());
+        for(set<commptr>::const_iterator sit2 = mspComm.begin();sit2!=mspComm.end();++sit2)
+        {
+            commptr pComm = *sit2;
+            pMP->AddCommPtr(pComm);
+        }
+    }
+}
+
 void BundledMap::AddBundledKeyFrames(bkfptr pBKFs)
 {
 
@@ -180,6 +333,66 @@ BundledMap::bkfptr BundledMap::GetErasedBKfsPtr(size_t BKfsId, size_t ClientId)
     else return nullptr;
 }
 
+BundledMap::bkfptr BundledMap::GetRandBKfPtr()
+{
+    ccptr pCC = *(mspCC.begin());
+
+    if(mnMaxBKFsid < (params::mapping::miNumRecentKFs))
+        return nullptr;
+
+    int cnt = 0;
+    int MaxIts = 1;
+    bkfptr pBKF;
+
+    while(!pBKF && cnt < MaxIts)
+    {
+        //BKF ID
+        size_t min = 0; //this KF is the query KF, it's neighbors are candidates for culling -- so 0 and 1 can be considered
+        size_t max = mnMaxBKFsid;
+        size_t id = min + (rand() % (size_t)(max - min + 1));
+
+        //Client ID
+        size_t cid = MAPRANGE;
+        if(msuAssClients.size() > 1)
+        {
+            min = 0;
+            max = msuAssClients.size() - 1;
+            size_t temp = min + (rand() % (size_t)(max - min + 1));
+
+            set<size_t>::iterator sit = msuAssClients.begin();
+            for(int it = 0;it < msuAssClients.size();++it)
+            {
+                if(it == temp)
+                {
+                    cid = *sit;
+                    break;
+                }
+                else
+                    ++sit;
+            }
+        }
+        else
+        {
+            cid = *(msuAssClients.begin());
+        }
+
+        pBKF = this->GetBKfsPtr(id,cid);
+        ++cnt;
+    }
+
+    return pBKF;
+}
+
+vector<BundledMap::bkfptr> BundledMap::GetAllBundledKeyFrames()
+{
+    unique_lock<mutex> lock(mMutexBMap);
+
+    vector<bkfptr> vpBKFs;
+    for(std::map<idpair,bkfptr>::iterator mit_set = mmpBundledKeyFrames.begin();mit_set!=mmpBundledKeyFrames.end();++mit_set)
+        vpBKFs.push_back(mit_set->second);
+    return vpBKFs;
+}
+
 vector<BundledMap::mpptr> BundledMap::GetAllMapPoints()
 {
     unique_lock<mutex> lock(mMutexBMap);
@@ -204,6 +417,36 @@ long unsigned int BundledMap::BundledKeyFramesInMap()
     return mmpBundledKeyFrames.size();
 }
 
+long unsigned int BundledMap::GetMaxBKFid()
+{
+    unique_lock<mutex> lock(mMutexBMap);
+    return mnMaxBKFsid;
+}
+
+long unsigned int BundledMap::GetMaxMPid()
+{
+    unique_lock<mutex> lock(mMutexBMap);
+    return mnMaxMPid;
+}
+
+long unsigned int BundledMap::GetMaxBKFidUnique()
+{
+    unique_lock<mutex> lock(mMutexBMap);
+    return mnMaxBKFsidUnique;
+}
+
+long unsigned int BundledMap::GetMaxMPidUnique()
+{
+    unique_lock<mutex> lock(mMutexBMap);
+    return mnMaxMPidUnique;
+}
+
+long unsigned int BundledMap::GetLastBKfIdUnique()
+{
+    unique_lock<mutex> lock(mMutexBMap);
+    return mnLastBKfsIdUnique;
+}
+
 BundledMap::mpptr BundledMap::GetMpPtr(size_t MpId, size_t ClientId)
 {
     unique_lock<mutex> lock(mMutexBMap);
@@ -221,6 +464,74 @@ void BundledMap::AddCCPtr(ccptr pCC)
 
     if(pCC->mpCH->GetCommPtr()) //when this is called during init procedure, mpCH->GetCommPtr() is still nullptr
         mspComm.insert(pCC->mpCH->GetCommPtr());
+}
+
+set<BundledMap::ccptr> BundledMap::GetCCPtrs()
+{
+    unique_lock<mutex> lock(this->mMutexCC);
+    return mspCC;
+}
+
+void BundledMap::StopGBA()
+{
+    {
+        //prevent two handlers from stopping GBA at the same time
+        unique_lock<mutex> lockStopGBAInProgress(mMutexStopGBAInProgess);
+        if(mbStopGBAInProgress)
+            return;
+        else
+            mbStopGBAInProgress = true;
+    }
+
+    cout << "BMap " << mBMapId << ": Stop GBA" << endl;
+    if(this->isRunningGBA())
+    {
+        #ifdef DONOTINTERRUPTMERGE
+        if(this->isMergeStepGBA())
+        {
+            cout << "BMap " << mBMapId << ": GBA stop declined -- MergeGBA" << endl;
+            return;
+        }
+        #endif
+
+        this->mbStopGBA = true;
+
+        while(!this->isFinishedGBA())
+            usleep(5000);
+
+        this->mpThreadGBA->join();
+        delete this->mpThreadGBA;
+    }
+    else
+    {
+        cout << COUTERROR << "called w/o GBA running -- BMap " << mBMapId << endl;
+    }
+
+    {
+        unique_lock<mutex> lockStopGBAInProgress(mMutexStopGBAInProgess);
+        mbStopGBAInProgress = false;
+    }
+    cout << "BMap " << mBMapId << ": GBA Stopped" << endl;
+}
+
+void BundledMap::ClearBadMPs()
+{
+    unique_lock<mutex> lock(mMutexBMap);
+    unique_lock<mutex> lock2(mMutexErased);
+
+    for(set<mpptr>::iterator sit = mspMPsToErase.begin();sit != mspMPsToErase.end();)
+    {
+        mpptr pMPi = *sit;
+
+        if(pMPi)
+        {
+            map<idpair,mpptr>::iterator mit2 = mmpMapPoints.find(pMPi->mId);
+            if(mit2 != mmpMapPoints.end())
+                mmpMapPoints.erase(mit2);
+        }
+
+        sit = mspMPsToErase.erase(sit);
+    }
 }
 
 BundledMap::ccptr BundledMap::GetCCPtr(size_t nClientId)

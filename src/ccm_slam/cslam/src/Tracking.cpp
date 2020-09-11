@@ -1113,7 +1113,7 @@ void Tracking::MultiCameraInitialization()
 
                 mCurrentFrame->mvpMapPointsBKFs[i]=pNewMP;
 
-                pNewMP->SetWorldPos(pNewMP->GetWorldPos(), false);
+                
             }
         }
 
@@ -2128,8 +2128,7 @@ void Tracking::CreateNewBundledKeyFrames()
                     mpBMap->AddMapPoint(pNewMP);
 
                     mCurrentFrame->mvpMapPointsBKFs[i]=pNewMP;
-
-                    pNewMP->SetWorldPos(pNewMP->GetWorldPos(), false);
+                    
                     nPoints++;
                 }
                 else

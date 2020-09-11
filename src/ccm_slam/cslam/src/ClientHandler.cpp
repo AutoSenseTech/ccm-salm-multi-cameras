@@ -456,33 +456,68 @@ void ClientHandler::InitializeClient()
 void ClientHandler::InitializeServer()
 {
     cout << "Client " << mClientId << " --> Initialize Threads" << endl;
-    //todo
-    // //+++++ Initialize the Loop Finder thread and launch +++++
+
+    //+++++ Initialize the Loop Finder thread and launch +++++
     // mpLoopFinder.reset(new LoopFinder(mpCC,mpKFDB,mpVoc,mpMap));
     // mptLoopClosure.reset(new thread(&LoopFinder::Run,mpLoopFinder));
     // usleep(10000);
-    // //+++++ Initialize the Local Mapping thread +++++
-    // mpMapping.reset(new LocalMapping(mpCC,mpMap,mpKFDB,mpViewer));
-    // mpMapping->SetLoopFinder(mpLoopFinder); //tempout
-    // usleep(10000);
-    // //+++++ Initialize the communication thread +++++
-    // mpComm.reset(new Communicator(mpCC,mpVoc,mpMap,mpKFDB));
-    // mpComm->SetMapping(mpMapping);
-    // usleep(10000);
-    // mpMapping->SetCommunicator(mpComm);
-    // mpMap->SetCommunicator(mpComm);
-    // usleep(10000);
-    // //Launch Threads
-    // //Should not do that before, a fast system might already use a pointer before it was set -> segfault
-    // mptMapping.reset(new thread(&LocalMapping::RunServer,mpMapping));
-    // mptComm.reset(new thread(&Communicator::RunServer,mpComm));
-    // usleep(10000);
-    // if(mpCC->mpCH == nullptr)
-    // {
-    //     ROS_ERROR_STREAM("ClientHandler::InitializeThreads()\": mpCC->mpCH is nullptr");
-    //     throw estd::infrastructure_ex();
-    // }
-    //endto
+    //+++++ Initialize the Local Mapping thread +++++
+    mpMapping.reset(new LocalMapping(mpCC,mpBMap,mpBKFDB,mpViewer));
+    //mpMapping->SetLoopFinder(mpLoopFinder); //tempout
+    usleep(10000);
+    //+++++ Initialize the communication thread +++++
+    mpComm.reset(new Communicator(mpCC,mpVoc,mpBMap,mpBKFDB));
+    mpComm->SetMapping(mpMapping);
+    usleep(10000);
+    mpMapping->SetCommunicator(mpComm);
+    mpBMap->SetCommunicator(mpComm);
+    usleep(10000);
+    //Launch Threads
+    //Should not do that before, a fast system might already use a pointer before it was set -> segfault
+    mptMapping.reset(new thread(&LocalMapping::RunServer,mpMapping));
+    mptComm.reset(new thread(&Communicator::RunServer,mpComm));
+    usleep(10000);
+    if(mpCC->mpCH == nullptr)
+    {
+        ROS_ERROR_STREAM("ClientHandler::InitializeThreads()\": mpCC->mpCH is nullptr");
+        throw estd::infrastructure_ex();
+    }
+}
+
+void ClientHandler::ChangeBMap(bmapptr pBMap, g2o::Sim3 g2oS_wnewmap_wcurmap)
+{
+    mpBMap = pBMap;
+
+    mg2oS_wcurmap_wclientmap = g2oS_wnewmap_wcurmap*mg2oS_wcurmap_wclientmap;
+    mpCC->mg2oS_wcurmap_wclientmap = mg2oS_wcurmap_wclientmap;
+
+    bool bLockedComm = mpCC->LockComm(); //should be locked and therefore return false
+    //    #ifdef LOGGING
+    //    mpCC->mpLogger->SetMappingLock(__LINE__,mpCC->mClientId);
+    //    #endif
+    bool bLockedMapping = mpCC->LockMapping(); //should be locked and therefore return false
+    //    #ifdef LOGGING
+    //    mpCC->mpLogger->SetMappingLock(__LINE__,mpCC->mClientId);
+    //    #endif
+
+    if(bLockedComm || bLockedMapping)
+    {
+        if(bLockedComm) cout << "\033[1;31m!!!!! ERROR !!!!!\033[0m ClientHandler::ChangeMap(): Comm not locked: " << endl;
+        if(bLockedMapping) cout << "\033[1;31m!!!!! ERROR !!!!!\033[0m ClientHandler::ChangeMap(): Mapping not locked: " << endl;
+        throw infrastructure_ex();
+    }
+
+    //    #ifdef LOGGING
+    //    mpCC->mpLogger->SetMappingLock(__LINE__,mpCC->mClientId);
+    //    #endif
+
+    mpComm->ChangeBMap(mpBMap);
+    mpMapping->ChangeBMap(mpBMap); //tempout
+    //mpLoopFinder->ChangeMap(mpMap); //tempout //todo： 自己的回环检测目前版本不需要了
+
+    //    #ifdef LOGGING
+    //    mpCC->mpLogger->SetMappingLock(__LINE__,mpCC->mClientId);
+    //    #endif
 }
 
 void ClientHandler::ChangeMap(mapptr pMap, g2o::Sim3 g2oS_wnewmap_wcurmap)
@@ -520,6 +555,7 @@ void ClientHandler::ChangeMap(mapptr pMap, g2o::Sim3 g2oS_wnewmap_wcurmap)
     //    mpCC->mpLogger->SetMappingLock(__LINE__,mpCC->mClientId);
     //    #endif
 }
+
 
 
 void ClientHandler::SetMapMatcher(matchptr pMatch)

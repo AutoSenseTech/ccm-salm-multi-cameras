@@ -84,6 +84,8 @@ public:
     void SetSendFull();
     
 //---set/get pointers---
+    void ReplaceBMap(bmapptr pNewBMap);
+    bmapptr GetBMapptr() {return mpBMap;}
     void AddCommPtr(commptr pComm){unique_lock<mutex> lockBMap(mMutexOut); mspComm.insert(pComm);}
 
 //---visualization---
@@ -95,6 +97,8 @@ public:
     cv::Mat GetPose();
     cv::Mat GetPoseInverse();
     cv::Mat GetCameraCenter(const int &cameraId);
+    cv::Mat GetRotation();
+    cv::Mat GetTranslation();
 
 // MapPoint observation functions
     void AddMapPoint(mpptr pMP, const size_t &index, bool bLock = false); 
@@ -105,6 +109,8 @@ public:
     std::vector<mpptr> GetMapPointMatches();
     mpptr GetMapPoint(const size_t &index);
     int TrackedMapPoints(const int &minObs);
+    void RemapMapPointMatch(mpptr pMP, const size_t &index_now, const size_t &index_new);
+
 // Bag of Words Representation
     void ComputeBoW(); 
 
@@ -113,6 +119,7 @@ public:
     void EraseConnection(bkfptr pBKFs);
     void UpdateConnections(bool bIgnoreMutex = false);
     void UpdateBestCovisibles();
+    std::set<bkfptr> GetConnectedBundledKeyFrames();
     std::vector<bkfptr> GetVectorCovisibleBundledKeyFrames();
     std::vector<bkfptr> GetBestCovisibilityBundledKeyFrames(const int &N);
     std::vector<bkfptr> GetCovisiblesByWeight(const int &w);
@@ -126,17 +133,36 @@ public:
     bkfptr GetParent(bool bIgnorePoseMutex = false);
     bool hasChild(bkfptr pBKFs);
 
+ // Loop Edges
+    void AddLoopEdge(bkfptr pBKF);
+    std::set<bkfptr> GetLoopEdges();
+
     // KeyPoint functions
     std::vector<size_t> GetFeaturesInArea(const float &x, const float  &y, const float  &r, const int &cameraId) const;
 
     // Image
     bool IsInImage(const float &x, const float &y, const int &cameraId) const;
 
+    // Enable/Disable bad flag changes
+    void SetNotErase();
+    void SetErase();
+
 // Set/check bad / empty flag
     void SetBadFlag(bool bSuppressMapAction = false, bool bNoParent = false);
     bool isBad() {unique_lock<mutex> lock(mMutexConnections); return mbBad;}
     bool IsEmpty() {unique_lock<mutex> lock(mMutexConnections); return mbIsEmpty;}
     bool mbOmitSending;     
+
+// Compute Scene Depth (q=2 median). Used in monocular.
+    //float ComputeSceneMedianDepth(const int q);
+
+    static bool weightComp( int a, int b){
+        return a>b;
+    }
+
+    static bool compBKFstamp(bkfptr pBKF1, bkfptr pBKF2) {
+      return  pBKF1->mTimeStamp > pBKF2->mTimeStamp;
+    }
 
 public:
     //Add new variable
@@ -196,7 +222,8 @@ public:
 
     // Calibration parameters
     vector<float> vfx, vfy, vcx, vcy, vinvfx, vinvfy;
-
+    float mThDepth;
+    
     vector<int> mvpkeyPointsNum;
 
     // Number of KeyPoints fused

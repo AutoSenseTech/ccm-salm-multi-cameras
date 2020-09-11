@@ -105,6 +105,7 @@ public:
     //---getter/setter---
     void SetMapMatcher(matchptr pMatch);
     void ChangeMap(mapptr pMap, g2o::Sim3 g2oS_wnewmap_wcurmap);
+    void ChangeBMap(bmapptr pBMap, g2o::Sim3 g2oS_wnewmap_wcurmap);
     commptr GetCommPtr(){return mpComm;}
     trackptr GetTrackPtr(){return mpTracking;}
     mappingptr GetMappingPtr(){return mpMapping;}

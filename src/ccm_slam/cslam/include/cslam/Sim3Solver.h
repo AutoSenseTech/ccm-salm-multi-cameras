@@ -23,6 +23,7 @@ namespace cslam{
 
 //forward decs
 class KeyFrame;
+class BundledKeyFrames;
 class MapPoint;
 //--------------------
 
@@ -30,10 +31,12 @@ class Sim3Solver
 {
 public:
     typedef boost::shared_ptr<KeyFrame> kfptr;
+    typedef boost::shared_ptr<BundledKeyFrames> bkfptr;
     typedef boost::shared_ptr<MapPoint> mpptr;
 public:
 
     Sim3Solver(kfptr pKF1, kfptr pKF2, const std::vector<mpptr> &vpMatched12, const bool bFixScale = true);
+    Sim3Solver(bkfptr pBKF1, bkfptr pBKF2, const std::vector<mpptr> &vpMatched12, const bool bFixScale = true);
 
     void SetRansacParameters(double probability = 0.99, int minInliers = 6 , int maxIterations = 300);
 
@@ -56,13 +59,21 @@ protected:
 
     void Project(const std::vector<cv::Mat> &vP3Dw, std::vector<cv::Mat> &vP2D, cv::Mat Tcw, cv::Mat K);
     void FromCameraToImage(const std::vector<cv::Mat> &vP3Dc, std::vector<cv::Mat> &vP2D, cv::Mat K);
+    void FromCameraToImage(const std::vector<cv::Mat> &vP3Dc, std::vector<cv::Mat> &vP2D, vector<cv::Mat> VK);
 
+// public:
+// vector<pair<int,int>> mvcamId1camId2;
+// pair<int,int> bestcamId1camId2;
 
 protected:
 
     // KeyFrames and matches
     kfptr mpKF1;
     kfptr mpKF2;
+
+    // BundledKeyFrames and matches
+    bkfptr mpBKF1;
+    bkfptr mpBKF2;
 
     std::vector<cv::Mat> mvX3Dc1;
     std::vector<cv::Mat> mvX3Dc2;
@@ -101,6 +112,8 @@ protected:
 
     // Indices for random selection
     std::vector<size_t> mvAllIndices;
+    //std::vector<size_t> mvAllCamera0MatchesIndices; //是两个都是0号相机的下标
+
 
     // Projections
     std::vector<cv::Mat> mvP1im1;
@@ -121,7 +134,11 @@ protected:
 
     // Calibration
     cv::Mat mK1;
+    //vector<cv::Mat> mVK1;
     cv::Mat mK2;
+    //vector<cv::Mat> mVK2;
+
+    
 };
 
 } //end namespace

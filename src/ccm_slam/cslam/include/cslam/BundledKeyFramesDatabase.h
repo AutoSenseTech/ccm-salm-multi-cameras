@@ -47,10 +47,12 @@ public:
 
     // Loop Detection
     //todo
-    //std::vector<bkfptr> DetectLoopCandidates(bkfptr pBKF, float minScore);
-    //vector<bkfptr> DetectMapMatchCandidates(bkfptr pBKF, float minScore, bmapptr pBMap);
+    std::vector<bkfptr> DetectLoopCandidates(bkfptr pBKF, float minScore);
+    vector<bkfptr> DetectMapMatchCandidates(bkfptr pBKF, float minScore, bmapptr pBMap);
     // Relocalization
-    //std::vector<bkfptr> DetectRelocalizationCandidates(Frame& F);
+    std::vector<bkfptr> DetectRelocalizationCandidates(Frame& F);
+
+ 
 
 protected:
 

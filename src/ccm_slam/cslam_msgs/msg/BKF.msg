@@ -77,4 +77,5 @@ Tcamji[] mvTcamji
     bool mbBad
 
 #BF and depth
+    float32 mThDepth
     float32[] mvBDepth

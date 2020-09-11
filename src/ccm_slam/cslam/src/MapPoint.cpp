@@ -493,10 +493,23 @@ MapPoint::kfptr MapPoint::GetReferenceKeyFrame()
      return mpRefKF;
 }
 
+MapPoint::bkfptr MapPoint::GetReferenceBundledKeyFrame()
+{
+     unique_lock<mutex> lock(mMutexFeatures);
+     return mpRefBKFs;
+}
+
+
 void MapPoint::SetReferenceKeyFrame(kfptr pKF)
 {
     unique_lock<mutex> lock(mMutexFeatures);
     mpRefKF = pKF;
+}
+
+void MapPoint::SetReferenceBundledKeyFrame(bkfptr pBKF)
+{
+    unique_lock<mutex> lock(mMutexFeatures);
+    mpRefBKFs = pBKF;
 }
 
 void MapPoint::AddObservation(kfptr pKF, size_t idx, bool bLock)
@@ -1030,46 +1043,88 @@ void MapPoint::Replace(mpptr pMP, bool bLock)
     mpBMap->EraseMapPoint(this->shared_from_this());
 }
 
+// void MapPoint::ReplaceAndLock(mpptr pMP)
+// {
+//     if(pMP->mId==this->mId)
+//         return;
+
+//     int nvisible, nfound;
+//     map<kfptr,size_t> obs;
+//     {
+//         unique_lock<mutex> lock1(mMutexFeatures);
+//         unique_lock<mutex> lock2(mMutexPos);
+//         obs=mObservations;
+//         mObservations.clear();
+//         mbBad=true;
+//         nvisible = mnVisible;
+//         nfound = mnFound;
+//         mpReplaced = pMP;
+//     }
+
+//     for(map<kfptr,size_t>::iterator mit=obs.begin(), mend=obs.end(); mit!=mend; mit++)
+//     {
+//         // Replace measurement in keyframe
+//         kfptr pKF = mit->first;
+
+//         if(pKF->IsEmpty()) continue;
+
+//         if(!pMP->IsInKeyFrame(pKF))
+//         {
+//             pKF->ReplaceMapPointMatch(mit->second, pMP,true);
+//             pMP->AddObservation(pKF,mit->second,true);
+//         }
+//         else
+//         {
+//             pKF->EraseMapPointMatch(mit->second,true);
+//         }
+//     }
+//     pMP->IncreaseFound(nfound);
+//     pMP->IncreaseVisible(nvisible);
+//     pMP->ComputeDistinctiveDescriptors();
+
+//     mpMap->EraseMapPoint(this->shared_from_this());
+// }
+
 void MapPoint::ReplaceAndLock(mpptr pMP)
 {
     if(pMP->mId==this->mId)
         return;
 
     int nvisible, nfound;
-    map<kfptr,size_t> obs;
+    map<bkfptr,size_t> obs;
     {
         unique_lock<mutex> lock1(mMutexFeatures);
         unique_lock<mutex> lock2(mMutexPos);
-        obs=mObservations;
-        mObservations.clear();
+        obs=mObservationsBKFs;
+        mObservationsBKFs.clear();
         mbBad=true;
         nvisible = mnVisible;
         nfound = mnFound;
         mpReplaced = pMP;
     }
 
-    for(map<kfptr,size_t>::iterator mit=obs.begin(), mend=obs.end(); mit!=mend; mit++)
+    for(map<bkfptr,size_t>::iterator mit=obs.begin(), mend=obs.end(); mit!=mend; mit++)
     {
         // Replace measurement in keyframe
-        kfptr pKF = mit->first;
+        bkfptr pBKF = mit->first;
 
-        if(pKF->IsEmpty()) continue;
+        if(pBKF->IsEmpty()) continue;
 
-        if(!pMP->IsInKeyFrame(pKF))
+        if(!pMP->IsInBundledKeyFrames(pBKF))
         {
-            pKF->ReplaceMapPointMatch(mit->second, pMP,true);
-            pMP->AddObservation(pKF,mit->second,true);
+            pBKF->ReplaceMapPointMatch(mit->second, pMP,true);
+            pMP->AddBKFsObservation(pBKF,mit->second,pBKF->cameraNum,true);
         }
         else
         {
-            pKF->EraseMapPointMatch(mit->second,true);
+            pBKF->EraseMapPointMatch(mit->second,true);
         }
     }
     pMP->IncreaseFound(nfound);
     pMP->IncreaseVisible(nvisible);
     pMP->ComputeDistinctiveDescriptors();
 
-    mpMap->EraseMapPoint(this->shared_from_this());
+    mpBMap->EraseMapPoint(this->shared_from_this());
 }
 
 void MapPoint::IncreaseVisible(int n)
@@ -1404,6 +1459,19 @@ void MapPoint::ReplaceMap(mapptr pNewMap)
     lock(lockFeat,lockPos,lockOut);
 
     mpMap = pNewMap;
+}
+
+void MapPoint::ReplaceBMap(bmapptr pNewBMap)
+{
+//    unique_lock<mutex> lockMap(mMapMutex);
+
+    unique_lock<mutex> lockFeat(mMutexFeatures,defer_lock);
+    unique_lock<mutex> lockPos(mMutexPos,defer_lock);
+    unique_lock<mutex> lockOut(mMutexOut,defer_lock);
+
+    lock(lockFeat,lockPos,lockOut);
+
+    mpBMap = pNewBMap;
 }
 
 // void MapPoint::ComputeDistinctiveDescriptors()
@@ -2202,6 +2270,13 @@ void MapPoint::RemapObservationId(kfptr pKF, const size_t &idx)
     unique_lock<mutex> lock(mMutexFeatures);
 
     mObservations[pKF] = idx;
+}
+
+void MapPoint::RemapObservationId(bkfptr pBKF, const size_t &index)
+{
+    unique_lock<mutex> lock(mMutexFeatures);
+
+    mObservationsBKFs[pBKF] = index;
 }
 
 std::string MapPoint::GetId()

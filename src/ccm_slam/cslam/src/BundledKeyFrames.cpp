@@ -81,7 +81,7 @@ BundledKeyFrames::BundledKeyFrames(Frame &F, bmapptr pBMap, bdbptr pBKFDB, commp
         mvGridElementWidthInv(F.mvGridElementWidthInv), mvGridElementHeightInv(F.mvGridElementHeightInv),
         mTrackReferenceForFrame(defpair), mFuseTargetForBKFs(defpair),
         mnLoopWords(0), mRelocQuery(defpair), mnRelocWords(0),
-        vfx(F.vfx), vfy(F.vfy), vcx(F.vcx), vcy(F.vcy), vinvfx(F.vinvfx), vinvfy(F.vinvfy),
+        vfx(F.vfx), vfy(F.vfy), vcx(F.vcx), vcy(F.vcy), vinvfx(F.vinvfx), vinvfy(F.vinvfy),mThDepth(F.mThDepth),
         mvpkeyPointsNum(F.mvpkeyPointsNum),mvKeysMultipleUn(F.mvKeysMultipleUn), mvpDescriptors(F.mvpDescriptors),
         N(F.N_L_R), mDescriptors(F.mJointDescriptors.clone()), mvBDepth(F.mvBDepth),
         mnScaleLevels(F.mnScaleLevels), mfScaleFactor(F.mfScaleFactor),
@@ -378,7 +378,14 @@ void BundledKeyFrames::UpdateBestCovisibles()
     mvOrderedWeights = vector<int>(lWs.begin(), lWs.end());
 }
 
-
+set<BundledKeyFrames::bkfptr> BundledKeyFrames::GetConnectedBundledKeyFrames()
+{
+    unique_lock<mutex> lock(mMutexConnections);
+    set<bkfptr> s;
+    for(map<bkfptr,int>::iterator mit=mConnectedBundledKeyFramesWeights.begin();mit!=mConnectedBundledKeyFramesWeights.end();mit++)
+        s.insert(mit->first);
+    return s;
+}
 
 
 void BundledKeyFrames::UpdateConnections(bool bIgnoreMutex)
@@ -606,6 +613,43 @@ void BundledKeyFrames::UpdateConnections(bool bIgnoreMutex)
     }
     #endif
 }
+
+void BundledKeyFrames::AddLoopEdge(bkfptr pBKF)
+{
+    unique_lock<mutex> lockCon(mMutexConnections);
+    mbNotErase = true;
+    mspLoopEdges.insert(pBKF);
+}
+
+set<BundledKeyFrames::bkfptr> BundledKeyFrames::GetLoopEdges()
+{
+    unique_lock<mutex> lockCon(mMutexConnections);
+    return mspLoopEdges;
+}
+
+
+void BundledKeyFrames::SetNotErase()
+{
+    unique_lock<mutex> lock(mMutexConnections);
+    mbNotErase = true;
+}
+
+void BundledKeyFrames::SetErase()
+{
+    {
+        unique_lock<mutex> lock(mMutexConnections);
+        if(mspLoopEdges.empty())
+        {
+            mbNotErase = false;
+        }
+    }
+
+    if(mbToBeErased)
+    {
+        SetBadFlag();
+    }
+}
+
 
 void BundledKeyFrames::SetBadFlag(bool bSuppressMapAction, bool bNoParent)
 {
@@ -889,6 +933,23 @@ bool BundledKeyFrames::hasChild(bkfptr pBKFs)
 {
     unique_lock<mutex> lockCon(mMutexConnections);
     return mspChildrens.count(pBKFs);
+}
+
+vector<BundledKeyFrames::bkfptr> BundledKeyFrames::GetCovisiblesByWeight(const int &w)
+{
+    unique_lock<mutex> lock(mMutexConnections);
+
+    if(mvpOrderedConnectedBundledKeyFrames.empty())
+        return vector<bkfptr>();
+
+    vector<int>::iterator it = upper_bound(mvOrderedWeights.begin(),mvOrderedWeights.end(),w,BundledKeyFrames::weightComp);
+    if(it==mvOrderedWeights.end())
+        return vector<bkfptr>();
+    else
+    {
+        int n = it-mvOrderedWeights.begin();
+        return vector<bkfptr>(mvpOrderedConnectedBundledKeyFrames.begin(), mvpOrderedConnectedBundledKeyFrames.begin()+n);
+    }
 }
 
 int BundledKeyFrames::GetWeight(bkfptr pBKFs)
@@ -1544,7 +1605,7 @@ void BundledKeyFrames::SetPose(const cv::Mat &Tcw_, bool bLock, bool bIgnorePose
     if(!mbOmitSending && this->IsSent())
     {
         mbPoseChanged = true;
-        if(mSysState == CLIENT)  //todo i think it should be commented wwh
+        if(mSysState == CLIENT) 
              SendMe();
     }
 }
@@ -1557,6 +1618,18 @@ void BundledKeyFrames::SetSendFull()
     }
 
     this->SendMe();
+}
+
+void BundledKeyFrames::ReplaceBMap(bmapptr pNewBMap)
+{
+    unique_lock<mutex> lock1(mMutexFeatures,defer_lock);
+    unique_lock<mutex> lock2(mMutexConnections,defer_lock);
+    unique_lock<mutex> lock3(mMutexPose,defer_lock);
+    unique_lock<mutex> lockOut(mMutexOut,defer_lock);
+
+    lock(lock1,lock2,lock3,lockOut);
+
+    mpBMap = pNewBMap;
 }
 
 void BundledKeyFrames::SendMe()
@@ -1930,6 +2003,19 @@ cv::Mat BundledKeyFrames::GetCameraCenter(const int &cameraId)
     return vOw[cameraId].clone();
 }
 
+cv::Mat BundledKeyFrames::GetRotation()
+{
+    unique_lock<mutex> lock(mMutexPose);
+    return Tcw.rowRange(0,3).colRange(0,3).clone();
+}
+
+cv::Mat BundledKeyFrames::GetTranslation()
+{
+    unique_lock<mutex> lock(mMutexPose);
+    return Tcw.rowRange(0,3).col(3).clone();
+}
+
+
 bool BundledKeyFrames::IsInImage(const float &x, const float &y, const int &cameraId) const
 {
     return (x>=mvMinX[cameraId] && x<mvMaxX[cameraId] && y>=mvMinY[cameraId] && y<mvMaxY[cameraId]);
@@ -2037,6 +2123,22 @@ set<BundledKeyFrames::mpptr> BundledKeyFrames::GetMapPoints()
             s.insert(pMP);
     }
     return s;
+}
+
+void BundledKeyFrames::RemapMapPointMatch(mpptr pMP, const size_t &index_now, const size_t &index_new)
+{
+    unique_lock<mutex> lock(mMutexFeatures);
+
+    mvpMapPoints[index_now] = nullptr;
+    mvpMapPoints[index_new] = pMP;
+
+    pMP->RemapObservationId(shared_from_this(),index_new);
+
+    if(mvbMapPointsLock[index_now])
+    {
+        mvbMapPointsLock[index_new] = true;
+        mvbMapPointsLock[index_now] = false;
+    }
 }
 
 }

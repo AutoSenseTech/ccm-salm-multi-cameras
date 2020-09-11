@@ -44,13 +44,13 @@ ServerSystem::ServerSystem(ros::NodeHandle Nh, ros::NodeHandle NhPrivate, const 
     this->LoadVocabulary(strVocFile);
 
     //+++++ Create KeyFrame Database +++++
-    this->InitializeKFDB();
+    this->InitializeBKFDB();
 
     //+++++ Create the Map +++++
-    this->InitializeMaps();
+    this->InitializeBMaps();
 
     //+++++ Create the Viewer +++++
-    this->InitializeViewer();
+    //this->InitializeViewer();  //todo
 
     #ifdef LOGGING
     mpLogger.reset(new estd::mylog(30.0,10000000));
@@ -149,12 +149,57 @@ void ServerSystem::InitializeMaps()
     if(mNumOfClients > 3) mpMap3.reset(new Map(mNh,mNhPrivate,3,eSystemState::SERVER)); else mpMap3=nullptr;
 }
 
+void ServerSystem::InitializeBMaps()
+{
+    mpBMap0.reset(new BundledMap(mNh,mNhPrivate,0,eSystemState::SERVER));
+    if(mNumOfClients > 1) mpBMap1.reset(new BundledMap(mNh,mNhPrivate,1,eSystemState::SERVER)); else mpBMap1=nullptr;
+    if(mNumOfClients > 2) mpBMap2.reset(new BundledMap(mNh,mNhPrivate,2,eSystemState::SERVER)); else mpBMap2=nullptr;
+    if(mNumOfClients > 3) mpBMap3.reset(new BundledMap(mNh,mNhPrivate,3,eSystemState::SERVER)); else mpBMap3=nullptr;
+}
+
 void ServerSystem::InitializeKFDB()
 {
     mpKFDB.reset(new KeyFrameDatabase(mpVoc));
 }
 
+void ServerSystem::InitializeBKFDB()
+{
+    mpBKFDB.reset(new BundledKeyFramesDatabase(mpVoc));
+}
+
 void ServerSystem::InitializeMapMatcher()
+{
+    mpMapMatcher.reset(new MapMatcher(mNh,mNhPrivate,mpBKFDB,mpVoc,mpBMap0,mpBMap1,mpBMap2,mpBMap3));
+    mptMapMatching.reset(new thread(&MapMatcher::Run,mpMapMatcher));
+	if(mpClient0)
+    {
+         commptr comm0 = mpClient0->GetCommPtr();
+         mpMapMatcher->SetCommunicator(comm0);//zmf add
+    } 
+    if(mpClient1)
+    {
+         commptr comm1 = mpClient1->GetCommPtr();
+         mpMapMatcher->SetCommunicator1(comm1);//zmf add
+         //mpMapMatcher->SetCommunicator(comm0,comm1);//zmf add
+    } 
+    if(mpClient2)
+    {
+         commptr comm2 = mpClient2->GetCommPtr();
+         //mpMapMatcher->SetCommunicator(comm0,comm1);//zmf add
+    } 
+    if(mpClient3)
+    {
+         commptr comm3 = mpClient3->GetCommPtr();
+         //mpMapMatcher->SetCommunicator(comm0,comm1);//zmf add
+    } 
+
+    if(mpClient0) mpClient0->SetMapMatcher(mpMapMatcher);
+    if(mpClient1) mpClient1->SetMapMatcher(mpMapMatcher);
+    if(mpClient2) mpClient2->SetMapMatcher(mpMapMatcher);
+    if(mpClient3) mpClient3->SetMapMatcher(mpMapMatcher);
+}
+
+void ServerSystem::InitializeBMapMatcher()
 {
     mpMapMatcher.reset(new MapMatcher(mNh,mNhPrivate,mpKFDB,mpVoc,mpMap0,mpMap1,mpMap2,mpMap3));
     mptMapMatching.reset(new thread(&MapMatcher::Run,mpMapMatcher));
@@ -185,6 +230,7 @@ void ServerSystem::InitializeMapMatcher()
     if(mpClient2) mpClient2->SetMapMatcher(mpMapMatcher);
     if(mpClient3) mpClient3->SetMapMatcher(mpMapMatcher);
 }
+
 
 void ServerSystem::InitializeViewer()
 {

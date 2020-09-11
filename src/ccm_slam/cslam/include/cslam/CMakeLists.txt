@@ -5,14 +5,18 @@ add_custom_target(headers_cslam SOURCES
   Communicator.h
   Converter.h
   Database.h
+  BundledKeyFramesDatabase.h
   Datatypes.h
   Frame.h
   Initializer.h
   KeyFrame.h
+  BundledKeyFrames.h
   LoopFinder.h
   Map.h
+  BundledMap.h
   MapMatcher.h
-  MapMerger.h
+  BMapMerger.h
+  G2Otypes.h
   Mapping.h
   MapPoint.h
   Optimizer.h

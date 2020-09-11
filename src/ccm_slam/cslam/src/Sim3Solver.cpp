@@ -91,6 +91,132 @@ Sim3Solver::Sim3Solver(kfptr pKF1, kfptr pKF2, const vector<mpptr > &vpMatched12
     SetRansacParameters();
 }
 
+Sim3Solver::Sim3Solver(bkfptr pBKF1, bkfptr pBKF2, const vector<mpptr > &vpMatched12, const bool bFixScale):
+mnIterations(0), mnBestInliers(0), mbFixScale(bFixScale)
+{
+    mpBKF1 = pBKF1;
+    mpBKF2 = pBKF2;
+
+    vector<mpptr> vpBundledKeyFrameMP1 = pBKF1->GetMapPointMatches();
+
+    mN1 = vpMatched12.size();
+
+    mvpMapPoints1.reserve(mN1);
+    mvpMapPoints2.reserve(mN1);
+    mvpMatches12 = vpMatched12;
+    mvnIndices1.reserve(mN1);
+    mvX3Dc1.reserve(mN1);
+    mvX3Dc2.reserve(mN1);
+
+    cv::Mat Rcw1 = pBKF1->GetRotation();
+    cv::Mat tcw1 = pBKF1->GetTranslation();
+    cv::Mat Rcw2 = pBKF2->GetRotation();
+    cv::Mat tcw2 = pBKF2->GetTranslation();
+
+    mvAllIndices.reserve(mN1);
+
+    size_t idx=0;
+    // mN1为pKF2特征点的个数
+    for(int i1=0; i1<mN1; i1++)
+    {
+        if(vpMatched12[i1])
+        {
+            mpptr pMP1 = vpBundledKeyFrameMP1[i1];
+            mpptr pMP2 = vpMatched12[i1];
+
+            if(!pMP1)
+            {
+                cout << "!pMP1" << endl;
+                continue;
+            }
+
+            if(pMP1->isBad() || pMP2->isBad())
+            {
+                continue;
+            }
+
+            int indexBKF1 = pMP1->GetIndexInBundledKeyFrames(pBKF1);
+            int indexBKF2 = pMP2->GetIndexInBundledKeyFrames(pBKF2);
+
+//            cout << "#obs pMP1: " << pMP1->GetObservations().size();
+//            cout << "#obs pMP2: " << pMP2->GetObservations().size();
+
+            if(indexBKF1<0 || indexBKF2<0)
+            {
+//                if (indexKF1<0) cout << "indexKF1<0" << endl;
+//                if (indexKF2<0) cout << "indexKF2<0" << endl;
+                continue;
+            }
+            vector<int> pair_index1 = pBKF1->vKeyPointsIndexMapPlus[indexBKF1];
+            int idx1 = -1;
+            int cameraId1 = -1;
+            for(size_t x = 0; x < pair_index1.size();x++)
+            {
+                if(pair_index1[x]>=0)
+                {
+                    idx1 = pair_index1[x];
+                    cameraId1 = x;
+                    break;
+                }
+            }
+            if(cameraId1 !=0)
+                continue;
+
+            const cv::KeyPoint &kp1 = pBKF1->mvKeysMultipleUn[cameraId1][idx1];
+            vector<int> pair_index2 = pBKF2->vKeyPointsIndexMapPlus[indexBKF2];
+            int idx2 = -1;
+            int cameraId2 = -1;
+            for(size_t x = 0; x < pair_index2.size();x++)
+            {
+                if(pair_index2[x]>=0)
+                {
+                    idx2 = pair_index2[x];
+                    cameraId2 = x;
+                    break;
+                }
+            }
+            if(cameraId2!=0)
+                continue;
+
+            const cv::KeyPoint &kp2 = pBKF2->mvKeysMultipleUn[cameraId2][idx2];
+
+            const float sigmaSquare1 = pBKF1->mvLevelSigma2[kp1.octave];
+            const float sigmaSquare2 = pBKF2->mvLevelSigma2[kp2.octave];
+
+            mvnMaxError1.push_back(9.210*sigmaSquare1);
+            mvnMaxError2.push_back(9.210*sigmaSquare2);
+
+            mvpMapPoints1.push_back(pMP1);
+            mvpMapPoints2.push_back(pMP2);
+            mvnIndices1.push_back(i1);
+
+            
+            cv::Mat X3D1w = pMP1->GetWorldPos();
+            mvX3Dc1.push_back(Rcw1*X3D1w+tcw1);
+         
+
+            cv::Mat X3D2w = pMP2->GetWorldPos();
+            // Ti0 = pBKF2->vmTi0[cameraId2];
+            // Ri0 = Ti0.rowRange(0,3).colRange(0,3);
+            // ti0 = Ti0.rowRange(0,3).col(3);
+            mvX3Dc2.push_back(Rcw2*X3D2w+tcw2);
+            //mVK2.push_back(pBKF2->mvpK[cameraId2]);
+            //mvcamId1camId2.push_back({cameraId1,cameraId2});
+            mvAllIndices.push_back(idx);
+
+            idx++;
+        }
+    }
+
+    mK1 = pBKF1->mvpK[0];
+    mK2 = pBKF2->mvpK[0];
+
+    FromCameraToImage(mvX3Dc1,mvP1im1,mK1);
+    FromCameraToImage(mvX3Dc2,mvP2im2,mK2);
+
+    SetRansacParameters();
+}
+
 void Sim3Solver::SetRansacParameters(double probability, int minInliers, int maxIterations)
 {
     mRansacProb = probability;
@@ -144,7 +270,7 @@ cv::Mat Sim3Solver::iterate(int nIterations, bool &bNoMore, vector<bool> &vbInli
         mnIterations++;
 
         vAvailableIndices = mvAllIndices;
-
+        //vAvailableIndices = mvAllCamera0MatchesIndices;
         // Get min set of points
         for(short i = 0; i < 3; ++i)
         {
@@ -398,6 +524,28 @@ void Sim3Solver::FromCameraToImage(const vector<cv::Mat> &vP3Dc, vector<cv::Mat>
 
     for(size_t i=0, iend=vP3Dc.size(); i<iend; i++)
     {
+        const float invz = 1/(vP3Dc[i].at<float>(2));
+        const float x = vP3Dc[i].at<float>(0)*invz;
+        const float y = vP3Dc[i].at<float>(1)*invz;
+
+        vP2D.push_back((cv::Mat_<float>(2,1) << fx*x+cx, fy*y+cy));
+    }
+}
+
+void Sim3Solver::FromCameraToImage(const vector<cv::Mat> &vP3Dc, vector<cv::Mat> &vP2D, vector<cv::Mat> VK)
+{
+    
+
+    vP2D.clear();
+    vP2D.reserve(vP3Dc.size());
+
+    for(size_t i=0, iend=vP3Dc.size(); i<iend; i++)
+    {
+        const float &fx = VK[i].at<float>(0,0);
+        const float &fy = VK[i].at<float>(1,1);
+        const float &cx = VK[i].at<float>(0,2);
+        const float &cy = VK[i].at<float>(1,2);
+
         const float invz = 1/(vP3Dc[i].at<float>(2));
         const float x = vP3Dc[i].at<float>(0)*invz;
         const float y = vP3Dc[i].at<float>(1)*invz;

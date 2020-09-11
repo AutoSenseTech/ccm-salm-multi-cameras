@@ -122,6 +122,7 @@ ADD_SUBDIRECTORY( include/cslam )
 
 add_library(ccmslam_lib
 #cpp files
+  src/BMapMerger.cpp
   src/BundledKeyFrames.cpp
   src/BundledMap.cpp
   src/BundledKeyFramesDatabase.cpp
@@ -139,7 +140,6 @@ add_library(ccmslam_lib
   src/Map.cpp
   src/skeleton.cpp #zmf add
   src/MapMatcher.cpp
-  src/MapMerger.cpp
   src/Mapping.cpp
   src/MapPoint.cpp
   src/Optimizer.cpp
@@ -151,6 +151,7 @@ add_library(ccmslam_lib
   src/Viewer.cpp
 
 #header
+  include/cslam/BMapMerger.h
   include/cslam/BundledMap.h
   include/cslam/BundledKeyFrames.h
   include/cslam/BundledKeyFramesDatabase.h
@@ -169,7 +170,6 @@ add_library(ccmslam_lib
   include/cslam/LoopFinder.h
   include/cslam/Map.h
   include/cslam/MapMatcher.h
-  include/cslam/MapMerger.h
   include/cslam/Mapping.h
   include/cslam/MapPoint.h
   include/cslam/Optimizer.h

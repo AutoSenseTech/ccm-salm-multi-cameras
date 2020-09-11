@@ -71,10 +71,13 @@ public:
     ServerSystem(ros::NodeHandle Nh, ros::NodeHandle NhPrivate, const string &strVocFile);
     void InitializeClients();
     void InitializeMapMatcher();
+    void InitializeBMapMatcher();
 private:
     void LoadVocabulary(const string &strVocFile);
     void InitializeMaps();
+    void InitializeBMaps();
     void InitializeKFDB();
+    void InitializeBKFDB();
     void InitializeMapping();
     void InitializeViewer();
 

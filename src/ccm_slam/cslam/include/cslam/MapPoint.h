@@ -120,6 +120,7 @@ public:
     //---set/get pointers---
     void ReplaceAndLock(mpptr pMP);
     void ReplaceMap(mapptr pNewMap);
+    void ReplaceBMap(bmapptr pNewBMap);
     void AddCommPtr(commptr pComm){unique_lock<mutex> lockMap(mMutexOut); mspComm.insert(pComm);}
     set<commptr> GetCommPtrs(){unique_lock<mutex> lockMap(mMutexOut); return mspComm;}
     size_t GetMaxObsKFId(){unique_lock<mutex> lock(mMutexFeatures); return mMaxObsKFId;}
@@ -140,7 +141,9 @@ public:
 
     cv::Mat GetNormal();
     kfptr GetReferenceKeyFrame();
+    bkfptr GetReferenceBundledKeyFrame();
     void SetReferenceKeyFrame(kfptr pKF);
+    void SetReferenceBundledKeyFrame(bkfptr pBKF);
 
     std::map<kfptr,size_t> GetObservations();
     std::map<bkfptr,size_t> GetBKFsObservations();
@@ -197,6 +200,7 @@ public:
     int PredictScale(const float &currentDist, frameptr pF);
 
     void RemapObservationId(kfptr pKF, const size_t &idx);
+    void RemapObservationId(bkfptr pBKF, const size_t &index);
 
 public:
     static long unsigned int nNextId;

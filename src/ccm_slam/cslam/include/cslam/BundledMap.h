@@ -55,42 +55,59 @@ public:
 //---Constructor---
     BundledMap(ros::NodeHandle Nh, ros::NodeHandle NhPrivate, size_t BMapId, eSystemState SysState);
     BundledMap(const bmapptr &pBMapA, const bmapptr &pBMapB); //merge constructor
-
+    void UpdateAssociatedData(); //need to be called after merge constructor. Cannot be called by merge constructor because of usage of shared_from_this()
+    BundledMap& operator=(BundledMap& rhs);
     
 
 //---infrastructure---
     set<size_t> msuAssClients;
     void AddCCPtr(ccptr pCC);
+    set<ccptr> GetCCPtrs();
     ccptr GetCCPtr(size_t nClientId);
+    void SetOutdated(){unique_lock<mutex> lock(mMutexOutdated); mbOutdated=true;}
+    bool GetOutdated(){unique_lock<mutex> lock(mMutexOutdated); return mbOutdated;}
     string mOdomFrame;
     size_t mBMapId;
     eSystemState mSysState;
-    
+
 //---Add/Erase data---
     void AddBundledKeyFrames(bkfptr pBKFs);
     void AddMapPoint(mpptr pMP);
     void EraseMapPoint(mpptr pMP);
     void EraseBundledKeyFrames(bkfptr pBKFs);
     void SetReferenceMapPoints(const std::vector<mpptr> &vpMPs);
-
+    void ClearBadMPs();
 
 //---Setter---
     void SetCommunicator(commptr pComm) {mspComm.insert(pComm);}
 
 //---Getter---
-    mpptr GetMpPtr(size_t MpId, size_t ClientId);
-    mpptr GetMpPtr(idpair id){return GetMpPtr(id.first,id.second);} 
     bkfptr GetBKfsPtr(size_t BKfsId, size_t ClientId, bool bIgnoreMutex = false);    
     bkfptr GetBKfsPtr(idpair id){return GetBKfsPtr(id.first,id.second);}
+    bkfptr GetRandBKfPtr();
+    mpptr GetMpPtr(size_t MpId, size_t ClientId);
+    mpptr GetMpPtr(idpair id){return GetMpPtr(id.first,id.second);} 
     bkfptr GetErasedBKfsPtr(size_t BKfsId, size_t ClientId);
     bkfptr GetErasedBKfsPtr(idpair id){return GetErasedBKfsPtr(id.first,id.second);}
+
+    vector<bkfptr> GetAllBundledKeyFrames();
     vector<mpptr> GetAllMapPoints();
     long unsigned int MapPointsInMap();
-
     long unsigned  BundledKeyFramesInMap();
+
+    long unsigned int GetMaxBKFid();
+    long unsigned int GetMaxMPid();
+    long unsigned int GetMaxBKFidUnique();
+    long unsigned int GetMaxMPidUnique();
+    long unsigned int GetLastBKfIdUnique();
+
     bkfptr GetPredecessor(bkfptr pBKFs);
 
-
+    std::vector<mpptr> GetMvpReferenceMapPoints() {return mvpReferenceMapPoints;}
+    std::map<idpair,mpptr> GetMmpMapPoints() {return mmpMapPoints;}
+    std::map<idpair,bkfptr> GetMmpBundledKeyFrames() {return mmpBundledKeyFrames;}
+    std::map<idpair,mpptr> GetMmpErasedMapPoints() {return mmpErasedMapPoints;}
+    std::map<idpair,bkfptr> GetMmpErasedBundledKeyFrames() {return mmpErasedBundledKeyFrames;}
 //---data---
     vector<bkfptr> mvpBundledKeyFramesOrigins;
 
@@ -110,6 +127,82 @@ public:
     std::mutex mMutexGBA;
     std::thread* mpThreadGBA;
 
+    bool isRunningGBA(){
+        unique_lock<std::mutex> lock(mMutexGBA);
+        return mbRunningGBA;
+    }
+    void setRunningGBA(){
+        unique_lock<std::mutex> lock(mMutexGBA);
+        mbRunningGBA = true;
+    }
+    void unsetRunningGBA(){
+        unique_lock<std::mutex> lock(mMutexGBA);
+        mbRunningGBA = false;
+    }
+
+    bool isFinishedGBA(){
+        unique_lock<std::mutex> lock(mMutexGBA);
+        return mbFinishedGBA;
+    }
+    void setFinishedGBA(){
+        unique_lock<std::mutex> lock(mMutexGBA);
+        mbFinishedGBA = true;
+    }
+    void unsetFinishedGBA(){
+        unique_lock<std::mutex> lock(mMutexGBA);
+        mbFinishedGBA = false;
+    }
+
+    bool isNoStartGBA(){
+        unique_lock<std::mutex> lock(mMutexGBA);
+        return mbNoStartGBA;
+    }
+    void setNoStartGBA(){
+        unique_lock<std::mutex> lock(mMutexGBA);
+        mbNoStartGBA = true;
+    }
+    void unsetNoStartGBA(){
+        unique_lock<std::mutex> lock(mMutexGBA);
+        mbNoStartGBA = false;
+    }
+
+    #ifdef DONOTINTERRUPTMERGE
+    bool isMergeStepGBA(){
+        unique_lock<std::mutex> lock(mMutexGBA);
+        return mbMergeStepGBA;
+    }
+    void setMergeStepGBA(){
+        unique_lock<std::mutex> lock(mMutexGBA);
+        mbMergeStepGBA = true;
+    }
+    void unsetMergeStepGBA(){
+//        unique_lock<std::mutex> lock(mMutexGBA); //already locked when this is used
+        mbMergeStepGBA = false;
+    }
+    #endif
+
+    void StopGBA();
+
+    #ifdef FINALBA
+    bool isGBAinterrupted(){
+        unique_lock<std::mutex> lock(mMutexGBA);
+        return mbGBAinterrupted;
+    }
+    void setGBAinterrupted(){
+        unique_lock<std::mutex> lock(mMutexGBA);
+        mbGBAinterrupted = true;
+    }
+    void unsetGBAinterrupted(){
+//        unique_lock<std::mutex> lock(mMutexGBA); //already locked when this is used
+        mbGBAinterrupted = false;
+    }
+    #endif
+
+    void RequestBA(size_t nClientId);
+    void RunGBA(idpair nLoopKF);
+    set<size_t> msnFinishedAgents;
+
+
 protected:
     //---infrastructure---
     ros::NodeHandle mNh;
@@ -120,6 +213,7 @@ protected:
 
     //---data---
     std::vector<mpptr> mvpReferenceMapPoints;
+
     long unsigned int mnMaxBKFsid;
     long unsigned int mnMaxMPid;
     long unsigned int mnMaxBKFsidUnique;

@@ -106,20 +106,29 @@ public:
     void static MapFusionGBA(mapptr pMap, size_t ClientId, int nIterations=5, bool *pbStopFlag=NULL,
                              idpair nLoopKF = make_pair(0,0), const bool bRobust = true);
 
+    void static BMapFusionGBA(bmapptr pBMap, size_t ClientId, int nIterations=5, bool *pbStopFlag=NULL,
+                             idpair nLoopBKF = make_pair(0,0), const bool bRobust = true);
+
     // if bFixScale is true, optimize SE3 (stereo,rgbd), Sim3 otherwise (mono) //ORB-SLAM中含有
     static int OptimizeSim3(kfptr pKF1, kfptr pKF2, std::vector<mpptr> &vpMatches1,
                             g2o::Sim3 &g2oS12, const float th2,bool bFixScale);
 
+    static int OptimizeSim3(bkfptr pBKF1, bkfptr pBKF2, std::vector<mpptr> &vpMatches1,
+                            g2o::Sim3 &g2oS12, const float th2,bool bFixScale);
     //does not acquire map mutex - done by merging method
     void static OptimizeEssentialGraphLoopClosure(mapptr pMap, kfptr pLoopKF, kfptr pCurKF,
                                        const KeyFrameAndPose &NonCorrectedSim3,
                                        const KeyFrameAndPose &CorrectedSim3,
                                        const map<kfptr, set<kfptr> > &LoopConnections,
                                        const bool &bFixScale);
-
+    
     void static OptimizeEssentialGraphMapFusion(mapptr pMap, kfptr pLoopKF, kfptr pCurKF,
                                        const map<kfptr, set<kfptr> > &LoopConnections,
                                        const bool &bFixScale);
+
+    void static OptimizeEssentialGraphMapFusion(bmapptr pBMap, bkfptr pLoopBKF, bkfptr pCurBKF,
+                                       const map<bkfptr, set<bkfptr> > &LoopConnections,
+                                       const bool &bFixScale);                                   
 
     size_t static GetID(idpair Idp, bool bIsKf)
     {

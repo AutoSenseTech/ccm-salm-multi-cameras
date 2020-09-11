@@ -58,11 +58,43 @@ MapMatcher::MapMatcher(ros::NodeHandle Nh, ros::NodeHandle NhPrivate, dbptr pDB,
     mMapMatchEdgeMsg.id = 1;
 }
 
+
+MapMatcher::MapMatcher(ros::NodeHandle Nh, ros::NodeHandle NhPrivate, bdbptr pBDB, vocptr pVoc, bmapptr pBMap0, bmapptr pBMap1, bmapptr pBMap2, bmapptr pBMap3)
+    : mNh(Nh), mNhPrivate(NhPrivate),
+      mpBKFDB(pBDB), mpVoc(pVoc), mpBMap0(pBMap0), mpBMap1(pBMap1), mpBMap2(pBMap2), mpBMap3(pBMap3),
+      mLastLoopBKFid(0),
+      mbFixScale(false),
+      mnCovisibilityConsistencyTh(params::placerec::miCovisibilityConsistencyTh)
+{
+    if(pBMap0) mmpBMaps[*(pBMap0->msuAssClients.begin())]=pBMap0;
+    if(pBMap1) mmpBMaps[*(pBMap1->msuAssClients.begin())]=pBMap1;
+    if(pBMap2) mmpBMaps[*(pBMap2->msuAssClients.begin())]=pBMap2;
+    if(pBMap3) mmpBMaps[*(pBMap3->msuAssClients.begin())]=pBMap3;
+
+    if(pBMap0) mspBMaps.insert(pBMap0);
+    if(pBMap1) mspBMaps.insert(pBMap1);
+    if(pBMap2) mspBMaps.insert(pBMap2);
+    if(pBMap3) mspBMaps.insert(pBMap3);
+
+    mPubMarker = mNh.advertise<visualization_msgs::Marker>("MapMatcherMarkers",10);
+
+    mMatchMatrix =  cv::Mat::zeros(4,4,2);
+
+    mMapMatchEdgeMsg.header.frame_id = "world";
+    mMapMatchEdgeMsg.header.stamp = ros::Time::now();
+    mMapMatchEdgeMsg.ns = "MapMatchEdges_red";
+    mMapMatchEdgeMsg.type = visualization_msgs::Marker::LINE_LIST;
+    mMapMatchEdgeMsg.color = Colors::msgRed();
+    mMapMatchEdgeMsg.action = visualization_msgs::Marker::ADD;
+    mMapMatchEdgeMsg.scale.x = params::vis::mfLoopMarkerSize;
+    mMapMatchEdgeMsg.id = 1;
+}
+
 void MapMatcher::Run()
 {
     double CovGraphMarkerSize;
     mNhPrivate.param("MarkerSizeServer",CovGraphMarkerSize,0.001);
-    mpMapMerger.reset(new MapMerger(shared_from_this()));
+    mpBMapMerger.reset(new BMapMerger(shared_from_this()));
 
     #ifdef LOGGING
     KeyFrame::ccptr pCC = mpMap0->GetCCPtr(0);
@@ -81,9 +113,8 @@ void MapMatcher::Run()
 		bool isSim3 =false;
         if(mScw.empty())
         {
-            if(CheckKfQueue())
+            if(CheckBKfQueue())
             {
-                //cout<<"you frame"<<endl;
                 
                 bool bDetect = DetectLoop();
                 if(bDetect)
@@ -268,41 +299,43 @@ map<double, vector<float>> MapMatcher::TransferToOtherFrame(const vector<cv::Mat
 bool MapMatcher::DetectLoop()
 {
     {
-        unique_lock<mutex> lock(mMutexKfInQueue);
-        mpCurrentKF = mlKfInQueue.front();
+        unique_lock<mutex> lock(mMutexBKfInQueue);
+        mpCurrentBKF = mlBKfsInQueue.front();
 
-        mlKfInQueue.pop_front();
-        // Avoid that a keyframe can be erased while it is being process by this thread
-        mpCurrentKF->SetNotErase();
+        mlBKfsInQueue.pop_front();
+        // Avoid that a Bundledkeyframe can be erased while it is being process by this thread
+        mpCurrentBKF->SetNotErase();
     }
 
-    //If the map contains less than 10 KF or less than 10 KF have passed from last loop detection
-    if(mpCurrentKF->mId.first<params::placerec::miStartMapMatchingAfterKf)
+    //If the Bmap contains less than 10 BKF or less than 10 BKF have passed from last loop detection
+    // 步骤1：如果距离上次闭环没多久（小于10帧），或者map中关键帧总共还没有30帧，则不进行闭环检测
+    if(mpCurrentBKF->mId.first<params::placerec::miStartMapMatchingAfterKf) 
     {
-        mpCurrentKF->SetErase();
+        mpCurrentBKF->SetErase();
         return false;
     }
 
-    mpCurrMap = mpCurrentKF->GetMapptr(); //get map of KF
+    mpCurrBMap = mpCurrentBKF->GetBMapptr(); //get map of KF
 
-    if(!mpCurrMap)
+    if(!mpCurrBMap)
     {
-        cout << ": In \"MapMatcher::DetectLoop()\": mpCurrMap is nullptr -> KF not contained in any map" << endl;
+        cout << ": In \"MapMatcher::DetectLoop()\": mpCurrBMap is nullptr -> KF not contained in any map" << endl;
         throw estd::infrastructure_ex();
     }
 
     // Compute reference BoW similarity score
     // This is the lowest score to a connected keyframe in the covisibility graph
     // We will impose loop candidates to have a higher similarity than this
-    const vector<kfptr> vpConnectedKeyFrames = mpCurrentKF->GetVectorCovisibleKeyFrames();
-    const DBoW2::BowVector &CurrentBowVec = mpCurrentKF->mBowVec;
+    //步骤2：遍历所有共视关键帧，计算当前关键帧与每个共视关键的bow相似度得分，并得到最低得分minScore
+    const vector<bkfptr> vpConnectedBundledKeyFrames = mpCurrentBKF->GetVectorCovisibleBundledKeyFrames();
+    const DBoW2::BowVector &CurrentBowVec = mpCurrentBKF->mBowVec;
     float minScore = 1;
-    for(size_t i=0; i<vpConnectedKeyFrames.size(); i++)
+    for(size_t i=0; i<vpConnectedBundledKeyFrames.size(); i++)
     {
-        kfptr pKF = vpConnectedKeyFrames[i];
-        if(pKF->isBad())
+        bkfptr pBKF = vpConnectedBundledKeyFrames[i];
+        if(pBKF->isBad())
             continue;
-        const DBoW2::BowVector &BowVec = pKF->mBowVec;
+        const DBoW2::BowVector &BowVec = pBKF->mBowVec;
 
         float score = mpVoc->score(CurrentBowVec, BowVec);
 
@@ -311,13 +344,13 @@ bool MapMatcher::DetectLoop()
     }
 
     // Query the database imposing the minimum score
-    vector<kfptr> vpCandidateKFs = mpKFDB->DetectMapMatchCandidates(mpCurrentKF, minScore, mpCurrMap);
+    vector<bkfptr> vpCandidateBKFs = mpBKFDB->DetectMapMatchCandidates(mpCurrentBKF, minScore, mpCurrBMap);
 
     // If there are no loop candidates, just add new keyframe and return false
-    if(vpCandidateKFs.empty())
+    if(vpCandidateBKFs.empty())
     {
-        mmvConsistentGroups[mpCurrMap].clear();
-        mpCurrentKF->SetErase();
+        mmvConsistentGroups[mpCurrBMap].clear();
+        mpCurrentBKF->SetErase();
         return false;
     }
 
@@ -325,32 +358,38 @@ bool MapMatcher::DetectLoop()
     // Each candidate expands a covisibility group (keyframes connected to the loop candidate in the covisibility graph)
     // A group is consistent with a previous group if they share at least a keyframe
     // We must detect a consistent loop in several consecutive keyframes to accept it
+    // 步骤4：在候选帧中检测具有连续性的候选帧
+    // 1、每个候选帧将与自己相连的关键帧构成一个“子候选组spCandidateGroup”，vpCandidateKFs-->spCandidateGroup
+    // 2、检测“子候选组”中每一个关键帧是否存在于“连续组”，如果存在nCurrentConsistency++，则将该“子候选组”放入“当前连续组vCurrentConsistentGroups”
+    // 3、如果nCurrentConsistency大于等于3，那么该”子候选组“代表的候选帧过关，进入mvpEnoughConsistentCandidates
     mvpEnoughConsistentCandidates.clear();
 
-    vector<ConsistentGroup> vCurrentConsistentGroups; //pair <set<KF*>,int> --> int counts consistent groups found for this group
-    vector<bool> vbConsistentGroup(mmvConsistentGroups[mpCurrMap].size(),false);
+    // ConsistentGroup.first对应每个“连续组”中的关键帧，ConsistentGroup.second为每个“连续组”的序号
+    vector<ConsistentGroup> vCurrentConsistentGroups; // pair<set<bkfptr>,int> ConsistentGroup; --> int counts consistent groups found for this group 
+    vector<bool> vbConsistentGroup(mmvConsistentGroups[mpCurrBMap].size(),false);
     //mvConsistentGroups stores the last found consistent groups.
 
-    for(size_t i=0, iend=vpCandidateKFs.size(); i<iend; i++)
+    for(size_t i=0, iend=vpCandidateBKFs.size(); i<iend; i++)
     {
-        kfptr pCandidateKF = vpCandidateKFs[i];
+        bkfptr pCandidateBKF = vpCandidateBKFs[i];
 
-        set<kfptr> spCandidateGroup = pCandidateKF->GetConnectedKeyFrames();
-        spCandidateGroup.insert(pCandidateKF);
+        set<bkfptr> spCandidateGroup = pCandidateBKF->GetConnectedBundledKeyFrames();
+        spCandidateGroup.insert(pCandidateBKF);
         //group with candidate and connected KFs
 
         bool bEnoughConsistent = false;
         bool bConsistentForSomeGroup = false;
-        for(size_t iG=0, iendG=mmvConsistentGroups[mpCurrMap].size(); iG<iendG; iG++)
+        // 遍历之前的“子连续组”
+        for(size_t iG=0, iendG=mmvConsistentGroups[mpCurrBMap].size(); iG<iendG; iG++)
         {
-            set<kfptr> sPreviousGroup = mmvConsistentGroups[mpCurrMap][iG].first;
+            set<bkfptr> sPreviousGroup = mmvConsistentGroups[mpCurrBMap][iG].first;
 
             bool bConsistent = false;
-            for(set<kfptr>::iterator sit=spCandidateGroup.begin(), send=spCandidateGroup.end(); sit!=send;sit++)
+            for(set<bkfptr>::iterator sit=spCandidateGroup.begin(), send=spCandidateGroup.end(); sit!=send;sit++)
             {
                 if(sPreviousGroup.count(*sit))
                 {
-                    //KF found that is contained in candidate's group and comparison group
+                    //BKF found that is contained in candidate's group and comparison group
                     bConsistent=true;
                     bConsistentForSomeGroup=true;
                     break;
@@ -359,17 +398,18 @@ bool MapMatcher::DetectLoop()
 
             if(bConsistent)
             {
-                int nPreviousConsistency = mmvConsistentGroups[mpCurrMap][iG].second;
+                int nPreviousConsistency = mmvConsistentGroups[mpCurrBMap][iG].second;
                 int nCurrentConsistency = nPreviousConsistency + 1;
                 if(!vbConsistentGroup[iG])
                 {
+                    // 将该“子候选组”的该关键帧打上编号加入到“当前连续组”
                     ConsistentGroup cg = make_pair(spCandidateGroup,nCurrentConsistency);
                     vCurrentConsistentGroups.push_back(cg);
                     vbConsistentGroup[iG]=true; //this avoid to include the same group more than once
                 }
                 if(nCurrentConsistency>=mnCovisibilityConsistencyTh && !bEnoughConsistent)
                 {
-                    mvpEnoughConsistentCandidates.push_back(pCandidateKF);
+                    mvpEnoughConsistentCandidates.push_back(pCandidateBKF);
                     bEnoughConsistent=true; //this avoid to insert the same candidate more than once
                 }
             }
@@ -384,11 +424,11 @@ bool MapMatcher::DetectLoop()
     }
 
     // Update Covisibility Consistent Groups
-    mmvConsistentGroups[mpCurrMap] = vCurrentConsistentGroups;
+    mmvConsistentGroups[mpCurrBMap] = vCurrentConsistentGroups;
 
     if(mvpEnoughConsistentCandidates.empty())
     {
-        mpCurrentKF->SetErase();
+        mpCurrentBKF->SetErase();
         return false;
     }
     else
@@ -396,7 +436,7 @@ bool MapMatcher::DetectLoop()
         return true;
     }
 
-    mpCurrentKF->SetErase();
+    mpCurrentBKF->SetErase();
     return false;
 }
 
@@ -421,18 +461,18 @@ bool MapMatcher::ComputeSim3()
 
     for(int i=0; i<nInitialCandidates; i++)
     {
-        kfptr pKF = mvpEnoughConsistentCandidates[i];
+        bkfptr pBKF = mvpEnoughConsistentCandidates[i];
 
         // avoid that local mapping erase it while it is being processed in this thread
-        pKF->SetNotErase();
+        pBKF->SetNotErase();
 
-        if(pKF->isBad())
+        if(pBKF->isBad())
         {
             vbDiscarded[i] = true;
             continue;
         }
 
-        int nmatches = matcher.SearchByBoW(mpCurrentKF,pKF,vvpMapPointMatches[i]);
+        int nmatches = matcher.SearchByBoW(mpCurrentBKF,pBKF,vvpMapPointMatches[i]);
 
         if(nmatches<params::opt::mMatchesThres)
         {
@@ -443,8 +483,9 @@ bool MapMatcher::ComputeSim3()
         {
             // ADD 双目server
             mbFixScale = true;
-            Sim3Solver* pSolver = new Sim3Solver(mpCurrentKF,pKF,vvpMapPointMatches[i],mbFixScale);
-
+            // 构造Sim3求解器
+            // 如果mbFixScale为true，则是6DoFf优化（双目 RGBD），如果是false，则是7DoF优化（单目）
+            Sim3Solver* pSolver = new Sim3Solver(mpCurrentBKF,pBKF,vvpMapPointMatches[i],mbFixScale);
             pSolver->SetRansacParameters(params::opt::mProbability,params::opt::mMinInliers,params::opt::mMaxIterations);
             vpSim3Solvers[i] = pSolver;
         }
@@ -456,6 +497,8 @@ bool MapMatcher::ComputeSim3()
     //cout<<"++ candiates个数： "<<nCandidates<<endl;
     // Perform alternatively RANSAC iterations for each candidate
     // until one is succesful or all fail
+    // 一直循环所有的候选帧，每个候选帧迭代5次，如果5次迭代后得不到结果，就换下一个候选帧
+    // 直到有一个候选帧首次迭代成功bMatch为true，或者某个候选帧总的迭代次数超过限制，直接将它剔除
     while(nCandidates>0 && !bMatch)
     {
         //cout<<"++++++++进入计算sim3 有candiates"<<endl;
@@ -464,7 +507,7 @@ bool MapMatcher::ComputeSim3()
             if(vbDiscarded[i])
                 continue;
 
-            kfptr pKF = mvpEnoughConsistentCandidates[i];
+            bkfptr pBKF = mvpEnoughConsistentCandidates[i];
 
             // Perform 5 Ransac Iterations
             vector<bool> vbInliers;
@@ -473,6 +516,18 @@ bool MapMatcher::ComputeSim3()
 
             Sim3Solver* pSolver = vpSim3Solvers[i];
             cv::Mat Scm  = pSolver->iterate(params::opt::mSolverIterations,bNoMore,vbInliers,nInliers);
+            //之前的复杂想法
+            // pair<int,int> bestcamId1camId2 = pSolver->bestcamId1camId2;
+            // cv::Mat T0i_1 = mpCurrentBKF->vmTi0[bestcamId1camId2.first].inv();
+            // cv::Mat R0i_1 = T0i_1.rowRange(0,3).colRange(0,3);
+            // cv::Mat t0i_1 = T0i_1.rowRange(0,3).col(3);
+
+            // cv::Mat Ti0_2 = pBKF->vmTi0[bestcamId1camId2.second];
+            // cv::Mat Ri0_2 = Ti0_2.rowRange(0,3).colRange(0,3);
+            // cv::Mat ti0_2 = Ti0_2.rowRange(0,3).col(3);
+
+            // Scm = T0i_1*Scm*Ti0_2;
+            //end 复杂想法
 
             // If Ransac reachs max. iterations discard keyframe
             if(bNoMore)
@@ -492,57 +547,61 @@ bool MapMatcher::ComputeSim3()
                 }
 
                 cv::Mat R = pSolver->GetEstimatedRotation();
+                //R = R0i_1 * R * Ri0_2;  //R = (cameraBKF,CandiateBKF)
                 cv::Mat t = pSolver->GetEstimatedTranslation();
+                //t = R0i_1*R*ti0_2 + R0i_1*t + t0i_1;
+
                 const float s = pSolver->GetEstimatedScale();
-                matcher.SearchBySim3(mpCurrentKF,pKF,vpMapPointMatches,s,R,t,7.5);
+                matcher.SearchBySim3(mpCurrentBKF,pBKF,vpMapPointMatches,s,R,t,7.5); //制造更多的匹配的mappoint
+
                 g2o::Sim3 gScm(Converter::toMatrix3d(R),Converter::toVector3d(t),s);
-                const int nInliers = Optimizer::OptimizeSim3(mpCurrentKF, pKF, vpMapPointMatches, gScm, 10, mbFixScale);
+                const int nInliers = Optimizer::OptimizeSim3(mpCurrentBKF, pBKF, vpMapPointMatches, gScm, 10, mbFixScale);
                 // If optimization is succesful stop ransacs and continue
                 if(nInliers>=params::opt::mInliersThres)
                 {
                     //cout<<"Enter Here Inliers"<<endl;
                     bMatch = true;
-                    mpMatchedKF = pKF;
+                    mpMatchedBKF = pBKF;
                     //cout<<"Enter Here Inliers 1"<<endl;
-                    g2o::Sim3 gSmw(Converter::toMatrix3d(pKF->GetRotation()),Converter::toVector3d(pKF->GetTranslation()),1.0);
-                   // cout<<"Enter Here Inliers 2"<<endl;
+                    g2o::Sim3 gSmw(Converter::toMatrix3d(pBKF->GetRotation()),Converter::toVector3d(pBKF->GetTranslation()),1.0);
+                   // 得到g2o优化后从世界坐标系到当前帧的Sim3变换
                     mg2oScw = gScm*gSmw;
                     //cout<<"Enter Here Inliers 3"<<endl;
                     mScw = Converter::toCvMat(mg2oScw);
-                    size_t clientIDCur = mpCurrentKF->mId.second;
-                   // cout<<"Enter Here Inliers 4" <<endl;
-                    //cout<<"client id: "<<clientIDCur<<endl;
-                    size_t clientIDMat = mpMatchedKF->mId.second;
-                    //cout<<"Enter Here Inliers 5"<<endl;
-                    //cout<<"client id(match): "<<clientIDMat<<endl;
-                    kfptr curIntKf = mpMap0->GetKfPtr(0,0);
-                    // if(curIntKf){
-                    //     cout<<"Id current:"<<curIntKf->mId.first<<endl;
-                    // }
-                   // cout<<"Enter Here Inliers 6"<<endl;
-                    kfptr matIntKf = mpMap1->GetKfPtr(0,1);  
-                    // if(curIntKf){
-                    //     cout<<"Id current:"<<matIntKf->mId.first<<endl;
-                    // }               
-                    //cout<<"current Map 第一帧时间戳： "<<setprecision(25)<<curIntKf->mTimeStamp<<endl;
-                    //cout<<"match Map 第一帧时间戳： "<<setprecision(25)<<matIntKf->mTimeStamp<<endl;
-                    if(curIntKf->mTimeStamp - matIntKf->mTimeStamp < 1e-6)
-                    {
-                        cout<<"ENTER HERE: SAME FRAME"<<endl;
-                        Eigen::Matrix3d R0 = Eigen::Matrix3d::Identity();
-                        Eigen::Vector3d t0 = Eigen::Vector3d::Zero();
-                        Eigen::Matrix4d estim_SE3 = Converter::toMatrix4d(mpCurrentKF->GetPose()*mpMatchedKF->GetPoseInverse());
-                        Eigen::Matrix3d R_estim = estim_SE3.block<3,3>(0,0);
-                        Eigen::Vector3d t_estim = estim_SE3.block<3,1>(0,3);
-                        // g2o::Sim3 temp_gScm(R_estim, t_estim,1.0);
-                        // mg2oScw = temp_gScm*gSmw;
-                        // mScw = Converter::toCvMat(mg2oScw);
-                        // cout<< "+++++++++++++++ccm compute sim3: " << endl << Converter::toCvMat(gScm)<<endl;
-                        // cout<< "+++++++++++++++ccm compute sim3/s: " << s << endl;
-                        // cout<< "++++++++++++++estimate compute sim3: "<<endl <<estim_SE3<<endl;
-                        //cout<<"current Map ClientID： "<<clientIDCur<<endl;
-                        //cout<<"match Map ClientID： "<<clientIDMat<<endl;
-                    }
+                //     size_t clientIDCur = mpCurrentKF->mId.second;
+                //    // cout<<"Enter Here Inliers 4" <<endl;
+                //     //cout<<"client id: "<<clientIDCur<<endl;
+                //     size_t clientIDMat = mpMatchedKF->mId.second;
+                //     //cout<<"Enter Here Inliers 5"<<endl;
+                //     //cout<<"client id(match): "<<clientIDMat<<endl;
+                //     kfptr curIntKf = mpMap0->GetKfPtr(0,0);
+                //     // if(curIntKf){
+                //     //     cout<<"Id current:"<<curIntKf->mId.first<<endl;
+                //     // }
+                //    // cout<<"Enter Here Inliers 6"<<endl;
+                //     kfptr matIntKf = mpMap1->GetKfPtr(0,1);  
+                //     // if(curIntKf){
+                //     //     cout<<"Id current:"<<matIntKf->mId.first<<endl;
+                //     // }               
+                //     //cout<<"current Map 第一帧时间戳： "<<setprecision(25)<<curIntKf->mTimeStamp<<endl;
+                //     //cout<<"match Map 第一帧时间戳： "<<setprecision(25)<<matIntKf->mTimeStamp<<endl;
+                //     if(curIntKf->mTimeStamp - matIntKf->mTimeStamp < 1e-6)
+                //     {
+                //         cout<<"ENTER HERE: SAME FRAME"<<endl;
+                //         Eigen::Matrix3d R0 = Eigen::Matrix3d::Identity();
+                //         Eigen::Vector3d t0 = Eigen::Vector3d::Zero();
+                //         Eigen::Matrix4d estim_SE3 = Converter::toMatrix4d(mpCurrentKF->GetPose()*mpMatchedKF->GetPoseInverse());
+                //         Eigen::Matrix3d R_estim = estim_SE3.block<3,3>(0,0);
+                //         Eigen::Vector3d t_estim = estim_SE3.block<3,1>(0,3);
+                //         // g2o::Sim3 temp_gScm(R_estim, t_estim,1.0);
+                //         // mg2oScw = temp_gScm*gSmw;
+                //         // mScw = Converter::toCvMat(mg2oScw);
+                //         // cout<< "+++++++++++++++ccm compute sim3: " << endl << Converter::toCvMat(gScm)<<endl;
+                //         // cout<< "+++++++++++++++ccm compute sim3/s: " << s << endl;
+                //         // cout<< "++++++++++++++estimate compute sim3: "<<endl <<estim_SE3<<endl;
+                //         //cout<<"current Map ClientID： "<<clientIDCur<<endl;
+                //         //cout<<"match Map ClientID： "<<clientIDMat<<endl;
+                //     }
                     mvpCurrentMatchedPoints = vpMapPointMatches;
                     break;
                 }
@@ -555,34 +614,34 @@ bool MapMatcher::ComputeSim3()
         //cout<<"进入计算sim3 !bmatch"<<endl;
         for(int i=0; i<nInitialCandidates; i++)
              mvpEnoughConsistentCandidates[i]->SetErase();
-        mpCurrentKF->SetErase();
+        mpCurrentBKF->SetErase();
         return false;
     }
 
     // Retrieve MapPoints seen in Loop Keyframe and neighbors
-    vector<kfptr> vpLoopConnectedKFs = mpMatchedKF->GetVectorCovisibleKeyFrames();
-    vpLoopConnectedKFs.push_back(mpMatchedKF);
+    vector<bkfptr> vpLoopConnectedBKFs = mpMatchedBKF->GetVectorCovisibleBundledKeyFrames();
+    vpLoopConnectedBKFs.push_back(mpMatchedBKF);
     mvpLoopMapPoints.clear();
-    for(vector<kfptr>::iterator vit=vpLoopConnectedKFs.begin(); vit!=vpLoopConnectedKFs.end(); vit++)
+    for(vector<bkfptr>::iterator vit=vpLoopConnectedBKFs.begin(); vit!=vpLoopConnectedBKFs.end(); vit++)
     {
-        kfptr pKF = *vit;
-        vector<mpptr> vpMapPoints = pKF->GetMapPointMatches();
+        bkfptr pBKF = *vit;
+        vector<mpptr> vpMapPoints = pBKF->GetMapPointMatches();
         for(size_t i=0, iend=vpMapPoints.size(); i<iend; i++)
         {
             mpptr pMP = vpMapPoints[i];
             if(pMP)
             {
-                if(!pMP->isBad() && pMP->mLoopPointForKF_MM!=mpCurrentKF->mId) //ID Tag
+                if(!pMP->isBad() && pMP->mLoopPointForBKF_MM!=mpCurrentBKF->mId) //ID Tag
                 {
                     mvpLoopMapPoints.push_back(pMP);
-                    pMP->mLoopPointForKF_MM = mpCurrentKF->mId;
+                    pMP->mLoopPointForBKF_MM = mpCurrentBKF->mId;
                 }
             }
         }
     }
 
     // Find more matches projecting with the computed Sim3
-    matcher.SearchByProjection(mpCurrentKF, mScw, mvpLoopMapPoints, mvpCurrentMatchedPoints,10);
+    matcher.SearchByProjection(mpCurrentBKF, mScw, mvpLoopMapPoints, mvpCurrentMatchedPoints,10);
 
     // If enough matches accept Loop
     int nTotalMatches = 0;
@@ -595,7 +654,7 @@ bool MapMatcher::ComputeSim3()
     if(nTotalMatches>=params::opt::mTotalMatchesThres)
     {
         for(int i=0; i<nInitialCandidates; i++)
-            if(mvpEnoughConsistentCandidates[i]!=mpMatchedKF)
+            if(mvpEnoughConsistentCandidates[i]!=mpMatchedBKF)
                 mvpEnoughConsistentCandidates[i]->SetErase();
         return true;
     }
@@ -604,7 +663,7 @@ bool MapMatcher::ComputeSim3()
         //cout<<"进入计算sim3 params::opt::mTotalMatchesThres"<<endl;
         for(int i=0; i<nInitialCandidates; i++)
             mvpEnoughConsistentCandidates[i]->SetErase();
-        mpCurrentKF->SetErase();
+        mpCurrentBKF->SetErase();
         return false;
     }
 }
@@ -613,8 +672,8 @@ void MapMatcher::CorrectLoop()
 {
     cout << "\033[1;32m!!! MAP MATCH FOUND !!!\033[0m" << endl;
 
-    set<size_t> suAssCLientsCurr = mpCurrentKF->GetMapptr()->msuAssClients;
-    set<size_t> suAssCLientsMatch = mpMatchedKF->GetMapptr()->msuAssClients;
+    set<size_t> suAssCLientsCurr = mpCurrentBKF->GetBMapptr()->msuAssClients;
+    set<size_t> suAssCLientsMatch = mpMatchedBKF->GetBMapptr()->msuAssClients;
 
     for(set<size_t>::iterator sit = suAssCLientsCurr.begin();sit!=suAssCLientsCurr.end();++sit)
     {
@@ -630,27 +689,29 @@ void MapMatcher::CorrectLoop()
         }
     }
 
-    if(mpCurrentKF->mId.second == mpMatchedKF->mId.second) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMatcher::CorrectLoop()\": Matched KFs belong to same client" << endl;
-    if(!mpCurrMap->msuAssClients.count(mpCurrentKF->mId.second)) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMatcher::CorrectLoop()\": Current KFs does not belong to current map" << endl;
-    if(mpCurrMap->msuAssClients.count(mpMatchedKF->mId.second)) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMatcher::CorrectLoop()\": Matched KFs belongs to current map" << endl;
+    if(mpCurrentBKF->mId.second == mpMatchedBKF->mId.second) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMatcher::CorrectLoop()\": Matched KFs belong to same client" << endl;
+    if(!mpCurrBMap->msuAssClients.count(mpCurrentBKF->mId.second)) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMatcher::CorrectLoop()\": Current KFs does not belong to current map" << endl;
+    if(mpCurrBMap->msuAssClients.count(mpMatchedBKF->mId.second)) cout << "\033[1;31m!!! ERROR !!!\033[0m In \"MapMatcher::CorrectLoop()\": Matched KFs belongs to current map" << endl;
 
-    if(params::vis::mbActive)
-        PublishLoopEdges();
+    //todo for visualization 
+    // if(params::vis::mbActive)
+    //     PublishLoopEdges();
+    //end todo
 
-    mapptr pMatchedMap = mpMatchedKF->GetMapptr();
+    bmapptr pMatchedBMap = mpMatchedBKF->GetBMapptr();
 
-    MapMatchHit MMH(mpCurrentKF,mpMatchedKF,mg2oScw,mvpLoopMapPoints,mvpCurrentMatchedPoints);
-    mFoundMatches[mpCurrMap][pMatchedMap].push_back(MMH);
-    mFoundMatches[pMatchedMap][mpCurrMap].push_back(MMH);
+    MapMatchHit MMH(mpCurrentBKF,mpMatchedBKF,mg2oScw,mvpLoopMapPoints,mvpCurrentMatchedPoints);
+    mFoundMatches[mpCurrBMap][pMatchedBMap].push_back(MMH);
+    mFoundMatches[pMatchedBMap][mpCurrBMap].push_back(MMH);
 
-    if(mFoundMatches[mpCurrMap][pMatchedMap].size() >= 1)
+    if(mFoundMatches[mpCurrBMap][pMatchedBMap].size() >= 1)
     {
-        vector<MapMatchHit> vMatches = mFoundMatches[mpCurrMap][pMatchedMap];
+        vector<MapMatchHit> vMatches = mFoundMatches[mpCurrBMap][pMatchedBMap];
         //cout<<"++++++++开始MergeMap，新地图时间： "<<setprecision(25)<<mpCurrentKF->mTimeStamp<<endl;
-        mapptr pMergedMap = mpMapMerger->MergeMaps(mpCurrMap,pMatchedMap,vMatches);
+        bmapptr pMergedBMap = mpBMapMerger->MergeBMaps(mpCurrBMap,pMatchedBMap,vMatches);
     }
 
-    this->ClearLoopEdges();
+    //this->ClearLoopEdges(); //todo uncomment
 }
 
 void MapMatcher::PublishLoopEdges()
@@ -709,6 +770,13 @@ void MapMatcher::InsertKF(kfptr pKF)
     mlKfInQueue.push_back(pKF);
 }
 
+void MapMatcher::InsertBKF(bkfptr pBKF)
+{
+    unique_lock<mutex> lock(mMutexBKfInQueue);
+
+    mlBKfsInQueue.push_back(pBKF);
+}
+
 void MapMatcher::EraseKFs(vector<kfptr> vpKFs)
 {
     unique_lock<mutex> lock(mMutexKfInQueue);
@@ -738,5 +806,13 @@ bool MapMatcher::CheckKfQueue()
 
     return (!mlKfInQueue.empty());
 }
+
+bool MapMatcher::CheckBKfQueue()
+{
+    unique_lock<mutex> lock(mMutexBKfInQueue);
+
+    return (!mlBKfsInQueue.empty());
+}
+
 
 }

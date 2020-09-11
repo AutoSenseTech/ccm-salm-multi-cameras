@@ -113,12 +113,15 @@ public:
     //trackwithmotionmodel for multi-camera
     int SearchByProjectionPlus(Frame &CurrentFrame, const Frame &LastFrame, const float th);
     // Project MapPoints seen in KeyFrame into the Frame and search matches.
+    
     // Used in relocalisation (Tracking)
     int SearchByProjection(Frame &CurrentFrame, kfptr pKF, const std::set<mpptr> &sAlreadyFound, const float th, const int ORBdist);
 
     // Project MapPoints using a Similarity Transformation and search matches.
     // Used in loop detection (Loop Closing)
-     int SearchByProjection(kfptr pKF, cv::Mat Scw, const std::vector<mpptr> &vpPoints, std::vector<mpptr> &vpMatched, int th);
+    int SearchByProjection(kfptr pKF, cv::Mat Scw, const std::vector<mpptr> &vpPoints, std::vector<mpptr> &vpMatched, int th);
+
+    int SearchByProjection(bkfptr pBKF, cv::Mat Scw, const std::vector<mpptr> &vpPoints, std::vector<mpptr> &vpMatched, int th);
 
     // Search matches between MapPoints in a KeyFrame and ORB in a Frame.
     // Brute force constrained to ORB that belong to the same vocabulary node (at a certain level)
@@ -126,6 +129,8 @@ public:
     int SearchByBoW(bkfptr pBKFs, Frame &F, std::vector<mpptr> &vpMapPointMatches);
     int SearchByBoW(kfptr pKF, Frame &F, std::vector<mpptr> &vpMapPointMatches);
     int SearchByBoW(kfptr pKF1, kfptr pKF2, std::vector<mpptr> &vpMatches12);
+    int SearchByBoW(bkfptr pBKF1, bkfptr pBKF2, vector<mpptr> &vpMatches12);  //multicamera in computesim3
+    
 
     // Matching for the Map Initialization (only used in the monocular case)
     int SearchForInitialization(Frame &F1, Frame &F2, std::vector<cv::Point2f> &vbPrevMatched, std::vector<int> &vnMatches12, int windowSize=10);
@@ -138,7 +143,7 @@ public:
     // Search matches between MapPoints seen in KF1 and KF2 transforming by a Sim3 [s12*R12|t12]
     // In the stereo and RGB-D case, s12=1
     int SearchBySim3(kfptr pKF1, kfptr pKF2, std::vector<mpptr> &vpMatches12, const float &s12, const cv::Mat &R12, const cv::Mat &t12, const float th);
-
+    int SearchBySim3(bkfptr pBKF1, bkfptr pBKF2, std::vector<mpptr> &vpMatches12, const float &s12, const cv::Mat &R12, const cv::Mat &t12, const float th);
     // Project MapPoints into KeyFrame and search for duplicated MapPoints.
     int Fuse(kfptr pKF, const vector<mpptr> &vpMapPoints, const float th=3.0);
     
@@ -146,6 +151,7 @@ public:
     int Fuse(bkfptr pBKFs, const vector<mpptr> &vpMapPoints, const float th = 3.0);
     // Project MapPoints into KeyFrame using a given Sim3 and search for duplicated MapPoints.
     int Fuse(kfptr pKF, cv::Mat Scw, const std::vector<mpptr> &vpPoints, float th, vector<mpptr> &vpReplacePoint);
+    int Fuse(bkfptr pBKF, cv::Mat Scw, const std::vector<mpptr> &vpPoints, float th, vector<mpptr> &vpReplacePoint);
 
 public:
 

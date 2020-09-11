@@ -141,6 +141,7 @@ public:
     //---getter/setter---
     void SetMapping(mappingptr pMapping) {mpMapping = pMapping;}
     void ChangeMap(mapptr pMap){mpMap = pMap;}
+    void ChangeBMap(bmapptr pBMap){mpBMap = pBMap;}
     void SetMapMatcher(matchptr pMatch) {mpMapMatcher = pMatch;}
     dbptr GetDbPtr(){return mpDatabase;}
     size_t GetClientId(){return mClientId;}

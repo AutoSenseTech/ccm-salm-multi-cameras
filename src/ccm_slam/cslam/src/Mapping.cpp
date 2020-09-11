@@ -144,83 +144,84 @@ void LocalMapping::RunClient()
 
 void LocalMapping::RunServer()
 {
-    // while(1)
-    // {
-    //     // Check if there are keyframes in the queue
-    //     if(CheckNewKeyFrames())
-    //     {
+    while(1)
+    {
+        // Check if there are keyframes in the queue
+        if(CheckNewBundledKeyFrames())
+        {
 
-    //         //cout <<"线程3:进入Mapping " <<endl;
-    //         #ifdef LOGGING
-    //         mpCC->mpLogger->SetMapping(__LINE__,mClientId);
-    //         #endif
+            //cout <<"线程3:进入Mapping " <<endl;
+            #ifdef LOGGING
+            mpCC->mpLogger->SetMapping(__LINE__,mClientId);
+            #endif
 
-    //         while(!mpCC->LockMapping()){usleep(params::timings::miLockSleep);}
+            while(!mpCC->LockMapping()){usleep(params::timings::miLockSleep);}
 
-    //         if(mpCC->mbOptActive) cout << "\033[1;31m!!!!! ERROR !!!!!\033[0m LocalMapping::Run(...): Optimization active - LocalMapping should be locked" << endl;
+            if(mpCC->mbOptActive) cout << "\033[1;31m!!!!! ERROR !!!!!\033[0m LocalMapping::Run(...): Optimization active - LocalMapping should be locked" << endl;
 
-    //         #ifdef LOGGING
-    //         mpCC->mpLogger->SetMapping(__LINE__,mClientId);
-    //         #endif
+            #ifdef LOGGING
+            mpCC->mpLogger->SetMapping(__LINE__,mClientId);
+            #endif
 
-    //         while(!mpMap->LockMapUpdate()){usleep(params::timings::miLockSleep);}
+            while(!mpBMap->LockBMapUpdate()){usleep(params::timings::miLockSleep);}
 
-    //         #ifdef LOGGING
-    //         mpCC->mpLogger->SetMapping(__LINE__,mClientId);
-    //         #endif
+            #ifdef LOGGING
+            mpCC->mpLogger->SetMapping(__LINE__,mClientId);
+            #endif
 
-    //         // pop KF from queue
-    //         //cout <<"线程3:Mapping ProcessNewKeyFrame" <<endl;
-    //         ProcessNewKeyFrame();
-    //         // cout <<"++++第 "<<(mpCurrentKeyFrame->mId.first)<< " NewKeyFrames 进入 runServer" <<endl;
-    //         //Visualize
-    //         mpViewer->DrawMap(mpMap);
+            // pop KF from queue
+            //cout <<"线程3:Mapping ProcessNewKeyFrame" <<endl;
+            ProcessNewBundledKeyFrames();
+            // cout <<"++++第 "<<(mpCurrentKeyFrame->mId.first)<< " NewKeyFrames 进入 runServer" <<endl;
 
-    //         // Check recent MapPoints
-    //         MapPointCullingServer();
+            //Visualize
+            //mpViewer->DrawMap(mpMap);  //TODO Uncomment
 
-    //         if(!CheckNewKeyFrames())
-    //         {
-    //             // Find more matches in neighbor keyframes and fuse point duplications
-    //            // cout <<"线程3:Mapping SearchInNeighbors" <<endl;
-    //             SearchInNeighbors();
-    //         }
+            // Check recent MapPoints
+            MapPointCullingServer();
 
-    //         // Check redundant local Keyframes
-    //         if(params::mapping::mfRedundancyThres < 1.0 && !CheckNewKeyFrames())
-    //         {
-    //             int temp = mpMap->mmpKeyFrames.size();
-    //             KeyFrameCullingV3();
-    //             cout << "进入culling" << (count++) << "次，删除" <<temp - mpMap->mmpKeyFrames.size()<<"个KF"<<endl;
-    //         }
+            if(!CheckNewBundledKeyFrames())
+            {
+                // Find more matches in neighbor keyframes and fuse point duplications
+               // cout <<"线程3:Mapping SearchInNeighbors" <<endl;
+                SearchInNeighbors(); 
+            }
 
-    //         // FIXME:
-    //         mpLoopFinder->InsertKF(mpCurrentKeyFrame);
-    //         mpMapMatcher->InsertKF(mpCurrentKeyFrame);
+            // Check redundant local Keyframes
+            if(params::mapping::mfRedundancyThres < 1.0 && !CheckNewBundledKeyFrames())
+            {
+                //int temp = mpBMap->mmpBundledKeyFrames.size();
+                BundledKeyFramesCullingV3(); 
+                //cout << "进入culling" << (count++) << "次，删除" <<temp - mpBMap->mmpBundledKeyFrames.size()<<"个BKF"<<endl;
+            }
 
-    //         mpKFDB->add(mpCurrentKeyFrame);
+            // FIXME:
+            //mpLoopFinder->InsertKF(mpCurrentKeyFrame);
+            mpMapMatcher->InsertBKF(mpCurrentBundledKeyFrames);
 
-    //         mpMap->ClearBadMPs();
+            mpBFKsDB->add(mpCurrentBundledKeyFrames);
 
-    //         mpMap->UnLockMapUpdate();
+            mpBMap->ClearBadMPs(); 
 
-    //         mpCC->UnLockMapping();
+            mpBMap->UnLockBMapUpdate();
 
-    //         #ifdef LOGGING
-    //         mpCC->mpLogger->SetMapping(__LINE__,mClientId);
-    //         #endif
-    //     }
-    //     else
-    //     {
-    //         #ifdef LOGGING
-    //         mpCC->mpLogger->SetMapping(__LINE__,mClientId);
-    //         #endif
-    //     }
+            mpCC->UnLockMapping();
 
-    //     ResetIfRequested();
+            #ifdef LOGGING
+            mpCC->mpLogger->SetMapping(__LINE__,mClientId);
+            #endif
+        }
+        else
+        {
+            #ifdef LOGGING
+            mpCC->mpLogger->SetMapping(__LINE__,mClientId);
+            #endif
+        }
 
-    //     usleep(params::timings::server::miMappingRate);
-    // }
+        ResetIfRequested(); //todo for loop finder (future)
+
+        usleep(params::timings::server::miMappingRate);
+    }
 }
 
 void LocalMapping::InsertKeyFrame(kfptr pKF)
@@ -1047,6 +1048,39 @@ void LocalMapping::MapPointCullingClient()
     }
 }
 
+// void LocalMapping::MapPointCullingServer()
+// {
+//     // Check Recent Added MapPoints
+//     list<mpptr>::iterator lit = mlpRecentAddedMapPoints.begin();
+
+//     int nThObs;
+//     nThObs = 3;
+//     const int cnThObs = nThObs;
+
+//     while(lit!=mlpRecentAddedMapPoints.end())
+//     {
+//         mpptr pMP = *lit;
+//         if(pMP->isBad())
+//         {
+//             lit = mlpRecentAddedMapPoints.erase(lit);
+//         }
+//         else if(pMP->GetFoundRatio()<0.25f )
+//         {
+//             pMP->SetBadFlag();
+//             lit = mlpRecentAddedMapPoints.erase(lit);
+//         }
+//         else if((mCountKFs - pMP->mInsertedWithKF) >= 3 && pMP->mId.second == mpCC->mClientId && pMP->Observations() <= cnThObs)
+//         {
+//             pMP->SetBadFlag();
+//             lit = mlpRecentAddedMapPoints.erase(lit);
+//         }
+//         else if((mCountKFs - pMP->mInsertedWithKF) >= 3)
+//             lit = mlpRecentAddedMapPoints.erase(lit);
+//         else
+//             lit++;
+//     }
+// }
+
 void LocalMapping::MapPointCullingServer()
 {
     // Check Recent Added MapPoints
@@ -1065,15 +1099,20 @@ void LocalMapping::MapPointCullingServer()
         }
         else if(pMP->GetFoundRatio()<0.25f )
         {
-            pMP->SetBadFlag();
+            pMP->SetBadFlagBKFs();
             lit = mlpRecentAddedMapPoints.erase(lit);
         }
-        else if((mCountKFs - pMP->mInsertedWithKF) >= 3 && pMP->mId.second == mpCC->mClientId && pMP->Observations() <= cnThObs)
+        else if((mCountBKFs - pMP->mInsertedWithBKFs) >= 3 && pMP->mId.second == mpCC->mClientId && pMP->Observations() <= cnThObs)
         {
-            pMP->SetBadFlag();
+            // 步骤3：将不满足VI-B条件的MapPoint剔除
+            // VI-B 条件2：从该点建立开始，到现在已经过了不小于2个关键帧
+            // 但是观测到该点的关键帧数却不超过cnThObs帧，那么该点检验不合格
+            pMP->SetBadFlagBKFs();
             lit = mlpRecentAddedMapPoints.erase(lit);
         }
-        else if((mCountKFs - pMP->mInsertedWithKF) >= 3)
+        else if((mCountBKFs - pMP->mInsertedWithBKFs) >= 3)
+            // 步骤4：从建立该点开始，已经过了3个关键帧而没有被剔除，则认为是质量高的点
+            // 因此没有SetBadFlag()，仅从队列中删除，放弃继续对该MapPoint的检测
             lit = mlpRecentAddedMapPoints.erase(lit);
         else
             lit++;
@@ -1175,6 +1214,145 @@ void LocalMapping::KeyFrameCullingV3()
         {
             pKF->SetBadFlag();
             ++mCulledKfs;
+        }
+    }
+}
+
+
+void LocalMapping::BundledKeyFramesCullingV3()
+{
+     //This version: randomly pick a KF and check for redundancy
+    bkfptr pBKFc = mpBMap->GetRandBKfPtr();
+    if(!pBKFc)
+        return; //safety check
+
+    //we don't check BKFs in mlpRecentAddedBKFs, since the neighbors will probably not be allowed for culling.
+    list<bkfptr>::iterator lit1 = std::find(mlpRecentAddedBKFs.begin(),mlpRecentAddedBKFs.end(),pBKFc);
+    if(lit1 != mlpRecentAddedBKFs.end())
+    {
+        //give it a second try -- if not successful return to not spend ages in this method.
+
+        pBKFc = mpBMap->GetRandBKfPtr();
+            if(!pBKFc)
+                return; //safety check
+
+        lit1 = std::find(mlpRecentAddedBKFs.begin(),mlpRecentAddedBKFs.end(),pBKFc);
+        if(lit1 != mlpRecentAddedBKFs.end())
+            return;
+    }
+
+    if(mspBKFsCheckedForCulling.count(pBKFc))
+        return;
+    else
+        mspBKFsCheckedForCulling.insert(pBKFc);
+
+    // Check redundant keyframes (only local keyframes)
+    // A keyframe is considered redundant if the 90% of the MapPoints it sees, are seen
+    // in at least other 3 keyframes (in the same or finer scale)
+    // We only consider close stereo points
+    vector<bkfptr> vpLocalBundledKeyFrames = pBKFc->GetVectorCovisibleBundledKeyFrames();
+
+    for(vector<bkfptr>::iterator vit=vpLocalBundledKeyFrames.begin(), vend=vpLocalBundledKeyFrames.end(); vit!=vend; vit++)
+    {
+        bkfptr pBKF = *vit;
+        if(pBKF->mId.first==0) //don't cull 0, since it's the origin, and also not one, because this was the other KF used for initialization. The systen won't experience problems if culling 1, nevetheless we don't do it.
+            continue;
+
+        list<bkfptr>::iterator lit2 = std::find(mlpRecentAddedBKFs.begin(),mlpRecentAddedBKFs.end(),pBKF);
+        if(lit2 != mlpRecentAddedBKFs.end())
+            continue;
+        const vector<mpptr> vpMapPoints = pBKF->GetMapPointMatches();
+
+        const int thObs=3;
+        int nRedundantObservations=0;
+        int nMPs=0;
+        for(size_t i=0, iend=vpMapPoints.size(); i<iend; i++)
+        {
+            mpptr pMP = vpMapPoints[i];
+            if(pMP)
+            {
+                if(!pMP->isBad())
+                {
+                    if(pBKF->mvBDepth[i]>pBKF->mThDepth || pBKF->mvBDepth[i]<0)
+                        continue;
+                    
+                    nMPs++;
+                    if(pMP->Observations()>thObs)
+                    {
+                        int scaleLevel =-1;
+                        if(pBKF->vKeyPointsIndexMapPlus[i][0] >=0)
+                        {
+                            int idx = pBKF->vKeyPointsIndexMapPlus[i][0];
+                            scaleLevel = pBKF->mvKeysMultipleUn[0][idx].octave;
+                        }
+                         else if(pBKF->vKeyPointsIndexMapPlus[i][1] >=0)
+                        {
+                            int idx = pBKF->vKeyPointsIndexMapPlus[i][1];
+                            scaleLevel = pBKF->mvKeysMultipleUn[1][idx].octave;
+                        } //todo add camera 2- camera3
+//                        else if(pBKFs->vKeyPointsIndexMapPlus[i][2] >=0)
+//                        {
+//                            int idx = pBKFs->vKeyPointsIndexMapPlus[i][2];
+//                            scaleLevel = pBKFs->mvKeysMultipleUn[2][idx].octave;
+//                        }
+//                        else
+//                        {
+//                            int idx = pBKFs->vKeyPointsIndexMapPlus[i][3];
+//                            scaleLevel = pBKFs->mvKeysMultipleUn[3][idx].octave;
+//                        }
+                        
+                        const map<bkfptr, size_t> observations = pMP->GetBKFsObservations();
+                        int nObs=0;
+                        for(map<bkfptr, size_t>::const_iterator mit=observations.begin(), mend=observations.end(); mit!=mend; mit++)
+                        {
+                            bkfptr pBKFi = mit->first;
+
+                            if(pBKFi->isBad()) continue;
+
+                            if(pBKFi==pBKF)
+                                continue;
+                            int scaleLeveli = -1;
+
+                            if(pBKFi->vKeyPointsIndexMapPlus[mit->second][0] >=0)
+                            {
+                                int idx = pBKFi->vKeyPointsIndexMapPlus[mit->second][0];
+                                scaleLeveli = pBKFi->mvKeysMultipleUn[0][idx].octave;
+                            }
+                            else if(pBKFi->vKeyPointsIndexMapPlus[mit->second][1] >=0)
+                            {
+                                int idx = pBKFi->vKeyPointsIndexMapPlus[mit->second][1];
+                                scaleLeveli = pBKFi->mvKeysMultipleUn[1][idx].octave;
+                            }//todo add camera2-camera3
+//                            else if(pBKFsi->vKeyPointsIndexMapPlus[mit->second][2] >=0)
+//                            {
+//                                int indx = pBKFsi->vKeyPointsIndexMapPlus[mit->second][2];
+//                                scaleLeveli = pBKFsi->mvKeysMultipleUn[2][idx].octave;
+//                            }
+//                            else
+//                            {
+//                                int indx = pBKFsi->vKeyPointsIndexMapPlus[mit->second][3];
+//                                scaleLeveli = pBKFsi->mvKeysMultipleUn[3][idx].octave;
+//                            }
+
+                            if(scaleLeveli<=scaleLevel+1)
+                            {
+                                nObs++;
+                                if(nObs>=thObs)
+                                    break;
+                            }
+                        }
+                        if(nObs>=thObs)
+                        {
+                            nRedundantObservations++;
+                        }
+                    }
+                }
+            }
+        }
+        if(nRedundantObservations>params::mapping::mfRedundancyThres*nMPs)
+        {
+            pBKF->SetBadFlag();
+            ++mCulledBKfs;
         }
     }
 }
