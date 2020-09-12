@@ -153,8 +153,9 @@ BundledKeyFrames::BundledKeyFrames(Frame &F, bmapptr pBMap, bdbptr pBKFDB, commp
     mdInsertStamp = ros::Time::now().toNSec();
 }
 
+//todo 2->4
 BundledKeyFrames::BundledKeyFrames(ccmslam_msgs::BKF* pMsg, vocptr pVoc, bmapptr pBMap, bdbptr pBKFDB, commptr pComm, eSystemState SysState, size_t UniqueId, g2o::Sim3 mg2oS_wcurmap_wclientmap)
-    :mFrameId(defpair),mVisId(-1),
+    :cameraNum(2),mFrameId(defpair),mVisId(-1),
     mbFirstConnection(true),mbNotErase(false),
     mbToBeErased(false),
     mpORBvocabulary(pVoc),mpBMap(pBMap), mpBundledKeyFramesDB(pBKFDB),
@@ -192,7 +193,7 @@ BundledKeyFrames::BundledKeyFrames(ccmslam_msgs::BKF* pMsg, vocptr pVoc, bmapptr
 
     mspComm.insert(pComm);
 
-    this->WriteMembersFromMessage(pMsg,mg2oS_wcurmap_wclientmap);  //todo
+    this->WriteMembersFromMessage(pMsg,mg2oS_wcurmap_wclientmap); 
 
     for(int id = 0; id < cameraNum; id++)
         AssignFeaturesToGrid(id);
@@ -200,6 +201,41 @@ BundledKeyFrames::BundledKeyFrames(ccmslam_msgs::BKF* pMsg, vocptr pVoc, bmapptr
     mdInsertStamp = ros::Time::now().toNSec();
 
     mbOmitSending = false;
+}
+
+void BundledKeyFrames::EstablishInitialConnectionsServer()
+{
+    //this is necessary, because we cannot use shared_from_this() in constructor
+
+    #ifdef LOGGING
+    ccptr pCC;
+    pCC = mpBMap->GetCCPtr(this->mId.second);
+    pCC->mpLogger->SetKF(__LINE__,this->mId.second);
+    #endif
+
+    {
+        unique_lock<mutex> lock(mMutexFeatures);
+
+        for(int index=0;index<mvpMapPoints.size();++index)
+        {
+            mpptr pMPi = mvpMapPoints[index];
+
+            if(pMPi)
+            {
+                pMPi->AddBKFsObservation(shared_from_this(),index, shared_from_this()->cameraNum);
+                pMPi->ComputeDistinctiveDescriptors();
+                pMPi->UpdateNormalAndDepthPlus();
+            }
+            else
+            {
+                //nullptr -- do not use
+            }
+        }
+    }
+
+    #ifdef LOGGING
+    pCC->mpLogger->SetKF(__LINE__,this->mId.second);
+    #endif
 }
 
 void BundledKeyFrames::EstablishInitialConnectionsClient()
@@ -1034,204 +1070,284 @@ void BundledKeyFrames::ConvertToMessage(ccmslam_msgs::BMap &msgBMap, g2o::Sim3 m
 
     if((mbSendFull || mSysState == eSystemState::SERVER) && !bForceUpdateMsg)
     {
-        // ccmslam_msgs::KF Msg;
+        ccmslam_msgs::BKF Msg;
 
-        // //??
-        // Msg.mbf = mbf;
-        // Msg.mThDepth = mThDepth;
+        //??
+        Msg.mThDepth = mThDepth;
 
-        // Msg.mvuRight.resize(mvuRight.size());
-        // for(int idx=0;idx<mvuRight.size();++idx) Msg.mvuRight[idx] = mvuRight[idx];
-        // Msg.mvDepth.resize(mvDepth.size());
-        // for(int idx=0;idx<mvDepth.size();++idx) Msg.mvDepth[idx] = mvDepth[idx];
+       
+        Msg.mvBDepth.resize(mvBDepth.size());
+        for(int index=0;index<mvBDepth.size();++index) Msg.mvBDepth[index] = mvBDepth[index];
 
-        // unique_lock<mutex> lock1(mMutexFeatures,defer_lock);
-        // unique_lock<mutex> lock2(mMutexConnections,defer_lock);
-        // unique_lock<mutex> lock3(mMutexPose,defer_lock);
+        unique_lock<mutex> lock1(mMutexFeatures,defer_lock);
+        unique_lock<mutex> lock2(mMutexConnections,defer_lock);
+        unique_lock<mutex> lock3(mMutexPose,defer_lock);
 
-        // lock(lock1,lock2,lock3);
+        lock(lock1,lock2,lock3);
 
-        // if(mSysState == eSystemState::SERVER)
-        // {         
-        //     float s = mg2oS_wcurmap_wclientmap.inverse().scale();
-        //     s = 1/s;
+        if(mSysState == eSystemState::SERVER)
+        {         
+            float s = mg2oS_wcurmap_wclientmap.inverse().scale();
+            s = 1/s;
 
-        //     cv::Mat Twp = cv::Mat(4,4,5);
-        //     cv::Mat Tcp  = cv::Mat(4,4,5);
+            cv::Mat Twp = cv::Mat(4,4,5);
+            cv::Mat Tcp  = cv::Mat(4,4,5);
 
-        //     if(this->mId != pRefKf->mId)
-        //     {
-        //         Twp = pRefKf->GetPoseInverse();
-        //         Tcp = Tcw * Twp;
-        //         Tcp.at<float>(0,3) *=(1./s);
-        //         Tcp.at<float>(1,3) *=(1./s);
-        //         Tcp.at<float>(2,3) *=(1./s);
-        //     }
-        //     else
-        //     {
-        //         Twp = cv::Mat::eye(4,4,5);
+            if(this->mId != pRefBKf->mId)
+            {
+                Twp = pRefBKf->GetPoseInverse();
+                Tcp = Tcw * Twp;
+                Tcp.at<float>(0,3) *=(1./s);
+                Tcp.at<float>(1,3) *=(1./s);
+                Tcp.at<float>(2,3) *=(1./s);
+            }
+            else
+            {
+                Twp = cv::Mat::eye(4,4,5);
 
-        //         cv::Mat Rcw = Tcw.rowRange(0,3).colRange(0,3);
-        //         cv::Mat tcw = Tcw.rowRange(0,3).col(3);
-        //         g2o::Sim3 g2oS_c_wm(Converter::toMatrix3d(Rcw),Converter::toVector3d(tcw),1.0); //cam - world map
+                cv::Mat Rcw = Tcw.rowRange(0,3).colRange(0,3);
+                cv::Mat tcw = Tcw.rowRange(0,3).col(3);
+                g2o::Sim3 g2oS_c_wm(Converter::toMatrix3d(Rcw),Converter::toVector3d(tcw),1.0); //cam - world map
 
-        //         g2o::Sim3 g2oS_c_wc = g2oS_c_wm*mg2oS_wcurmap_wclientmap;
+                g2o::Sim3 g2oS_c_wc = g2oS_c_wm*mg2oS_wcurmap_wclientmap;
 
-        //         Eigen::Matrix3d eigR = g2oS_c_wc.rotation().toRotationMatrix();
-        //         Eigen::Vector3d eigt = g2oS_c_wc.translation();
-        //         float scale = mg2oS_wcurmap_wclientmap.inverse().scale();
-        //         scale = 1/scale;
-        //         eigt *=(1./scale); //[R t/s;0 1]
-        //         cv::Mat T_c_wc = Converter::toCvSE3(eigR,eigt);
+                Eigen::Matrix3d eigR = g2oS_c_wc.rotation().toRotationMatrix();
+                Eigen::Vector3d eigt = g2oS_c_wc.translation();
+                float scale = mg2oS_wcurmap_wclientmap.inverse().scale();
+                scale = 1/scale;
+                eigt *=(1./scale); //[R t/s;0 1]
+                cv::Mat T_c_wc = Converter::toCvSE3(eigR,eigt);
 
-        //         Tcp = T_c_wc * Twp;
-        //     }
+                Tcp = T_c_wc * Twp;
+            }
 
-        //     Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::KF::_mTcpred_type,float>(Tcp,Msg.mTcpred);
+            Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::BKF::_mTcpred_type,float>(Tcp,Msg.mTcpred);
 
-        //     Msg.mpPred_KfId = static_cast<uint16_t>(pRefKf->mId.first);
-        //     Msg.mpPred_KfClientId = static_cast<uint8_t>(pRefKf->mId.second);
+            Msg.mpPred_BKfId = static_cast<uint16_t>(pRefBKf->mId.first);
+            Msg.mpPred_BKfClientId = static_cast<uint8_t>(pRefBKf->mId.second);
 
-        //     Msg.mpPar_KfId = KFRANGE;
-        //     Msg.mpPar_KfClientId = MAPRANGE;
+            Msg.mpPar_BKfId = KFRANGE;
+            Msg.mpPar_BKfClientId = MAPRANGE;
 
-        //     Msg.mbBad = mbBad;
-        //     Msg.bSentOnce = mbSentOnce;
+            Msg.mbBad = mbBad;
+            Msg.bSentOnce = mbSentOnce;
 
-        //     ccptr pCC = mpMap->GetCCPtr(mId.second);
-        //     if(pCC->mbOptimized)
-        //         Msg.mbPoseChanged = true;
-        //     else
-        //         Msg.mbPoseChanged = mbPoseChanged;
+            ccptr pCC = mpBMap->GetCCPtr(mId.second);
+            if(pCC->mbOptimized)
+                Msg.mbPoseChanged = true;
+            else
+                Msg.mbPoseChanged = mbPoseChanged;
 
-        //     Msg.mbServerBA = false;
-        // }
-        // else
-        // {
-        //     if(this->mId.first == 0)
-        //     {
-        //         Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::KF::_mTcpred_type,float>(Tcw,Msg.mTcpred);
-        //     }
-        //     else
-        //     {
-        //         //pose relative to predecessor
-        //         kfptr pPred = mpMap->GetPredecessor(shared_from_this());
-        //         mTcp = Tcw*pPred->GetPoseInverse();
-        //         Msg.mpPred_KfId = static_cast<uint16_t>(pPred->mId.first);
-        //         Msg.mpPred_KfClientId = static_cast<uint8_t>(pPred->mId.second);
-        //         Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::KF::_mTcpred_type,float>(mTcp,Msg.mTcpred);
+            Msg.mbServerBA = false;
+        }
+        else
+        {
+            if(this->mId.first == 0)
+            {
+                Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::BKF::_mTcpred_type,float>(Tcw,Msg.mTcpred);
+            }
+            else
+            {
+                //pose relative to predecessor
+                bkfptr pPred = mpBMap->GetPredecessor(shared_from_this());
+                mTcp = Tcw*pPred->GetPoseInverse();
+                Msg.mpPred_BKfId = static_cast<uint16_t>(pPred->mId.first);
+                Msg.mpPred_BKfClientId = static_cast<uint8_t>(pPred->mId.second);
+                Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::BKF::_mTcpred_type,float>(mTcp,Msg.mTcpred);
 
-        //         //pose relative to parent's parent
-        //         if(!mpParent)
-        //         {
-        //             cout << COUTFATAL << ": no parent" << endl;
-        //             throw infrastructure_ex();
-        //         }
-        //         else
-        //         {
-        //             kfptr pParPar = mpParent->GetParent();
-        //             if(!pParPar)
-        //                 pParPar = mpParent; //if mpParents has no parent, use mpParent
-        //             else if(pParPar->mId == this->mId)
-        //             {
-        //                 pParPar = mpParent; //if mpParents has no parent, use mpParent
-        //             }
+                //pose relative to parent's parent
+                if(!mpParent)
+                {
+                    cout << COUTFATAL << ": no parent" << endl;
+                    throw infrastructure_ex();
+                }
+                else
+                {
+                    bkfptr pParPar = mpParent->GetParent();
+                    if(!pParPar)
+                        pParPar = mpParent; //if mpParents has no parent, use mpParent
+                    else if(pParPar->mId == this->mId)
+                    {
+                        pParPar = mpParent; //if mpParents has no parent, use mpParent
+                    }
 
-        //             mTcp = Tcw*pParPar->GetPoseInverse();
-        //             Msg.mpPar_KfId = static_cast<uint16_t>(pParPar->mId.first);
-        //             Msg.mpPar_KfClientId = static_cast<uint8_t>(pParPar->mId.second);
-        //             Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::KF::_mTcpar_type,float>(mTcp,Msg.mTcpar);
+                    mTcp = Tcw*pParPar->GetPoseInverse();
+                    Msg.mpPar_BKfId = static_cast<uint16_t>(pParPar->mId.first);
+                    Msg.mpPar_BKfClientId = static_cast<uint8_t>(pParPar->mId.second);
+                    Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::BKF::_mTcpar_type,float>(mTcp,Msg.mTcpar);
 
-        //             Msg.mbServerBA = false;
-        //         }
-        //     }
+                    Msg.mbServerBA = false;
+                }
+            }
 
-        //     //    Msg.mbBad = mbBad;
-        //     Msg.mbBad = false; //necessary in case that KF is in out buffer when trimmed from Map
-        //     Msg.mbAck = mbAck;
+            //    Msg.mbBad = mbBad;
+            Msg.mbBad = false; //necessary in case that KF is in out buffer when trimmed from Map
+            Msg.mbAck = mbAck;
 
-        //     Msg.bSentOnce = mbSentOnce;
-        //     mbSentOnce = true;
-        //     mbPoseChanged = false;
-        //     mbSendFull = false;
+            Msg.bSentOnce = mbSentOnce;
+            mbSentOnce = true;
+            mbPoseChanged = false;
+            mbSendFull = false;
 
-        //     ccptr pCC = mpMap->GetCCPtr(this->mId.second);
-        //     cv::Mat T_SC = Converter::toCvMat(pCC->mT_SC);
-        //     Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::KF::_mT_SC_type,float>(T_SC,Msg.mT_SC);
-        // }
+            ccptr pCC = mpBMap->GetCCPtr(this->mId.second);
+            cv::Mat T_SC = Converter::toCvMat(pCC->mT_SC);
+            Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::BKF::_mT_SC_type,float>(T_SC,Msg.mT_SC);
+        }
 
-        // //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-        // //   ++
-        // //   ++
-        // // ++++++   Const values
-        // //  ++++
-        // //   ++
+        //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        //   ++
+        //   ++
+        // ++++++   Const values
+        //  ++++
+        //   ++
 
-        // Msg.mnGridCols = mnGridCols;
-        // Msg.mnGridRows = mnGridRows;
-        // Msg.mfGridElementWidthInv = mfGridElementWidthInv;
-        // Msg.mfGridElementHeightInv = mfGridElementHeightInv;
+        Msg.mnGridCols = mnGridCols;
+        Msg.mnGridRows = mnGridRows;
+        
+        Msg.mvGridElementWidthInv.resize(mvGridElementWidthInv.size());
+        for(int index=0;index<mvGridElementWidthInv.size();++index) Msg.mvGridElementWidthInv[index] = mvGridElementWidthInv[index];
 
-        // Msg.fx = fx;
-        // Msg.fy = fy;
-        // Msg.cx = cx;
-        // Msg.cy = cy;
-        // Msg.invfx = invfx;
-        // Msg.invfy = invfy;
+        Msg.mvGridElementHeightInv.resize(mvGridElementHeightInv.size());
+        for(int index=0;index<mvGridElementHeightInv.size();++index) Msg.mvGridElementHeightInv[index] = mvGridElementHeightInv[index];
+        
+        Msg.vfx.resize(vfx.size());
+        Msg.vfy.resize(vfy.size());
+        Msg.vcx.resize(vcx.size());
+        Msg.vcy.resize(vcy.size());
+        Msg.vinvfx.resize(vinvfx.size());
+        Msg.vinvfy.resize(vinvfy.size());
 
-        // Msg.N = static_cast<int16_t>(N);
+        for(int id = 0; id < vfx.size(); id++)
+        {
+            Msg.vfx[id] = vfx[id];
+            Msg.vfy[id] = vfy[id];
+            Msg.vcx[id] = vcx[id];
+            Msg.vcy[id] = vcy[id];
+            Msg.vinvfx[id] = vinvfx[id];
+            Msg.vinvfy[id] = vinvfy[id];
+        }
+       
 
-        // for(int idx=0;idx<mvKeysUn.size();++idx) Msg.mvKeysUn.push_back(Converter::toCvKeyPointMsg(mvKeysUn[idx]));
+        Msg.N = static_cast<int16_t>(N);
+        
+        Msg.mvpkeyPointsNum.resize(mvpkeyPointsNum.size());
+        for(int id =0; id < mvpkeyPointsNum.size(); id++) Msg.mvpkeyPointsNum[id] = mvpkeyPointsNum[id];
+       
+        Msg.vKeyPointsIndexMapPlus.resize(vKeyPointsIndexMapPlus.size()); //N
+        for(int idx = 0; idx < vKeyPointsIndexMapPlus.size(); idx++) 
+        {
+            Msg.vKeyPointsIndexMapPlus[idx].mKeyPointsIndexMapPlus.resize(vKeyPointsIndexMapPlus[idx].size());  //4
+            for(int idy = 0; idy < vKeyPointsIndexMapPlus[idx].size(); idy++)
+            {
+                Msg.vKeyPointsIndexMapPlus[idx].mKeyPointsIndexMapPlus[idy] =  vKeyPointsIndexMapPlus[idx][idy];
+            }
+        }
 
-        // for(int idx=0;idx<mDescriptors.rows;++idx)
-        // {
-        //     ccmslam_msgs::Descriptor MsgDesc;
-        //     for(int idy=0;idy<mDescriptors.cols;++idy)
-        //     {
-        //         MsgDesc.mDescriptor[idy]=mDescriptors.at<uint8_t>(idx,idy);
-        //     }
-        //     Msg.mDescriptors.push_back(MsgDesc);
-        // }
+        Msg.mvTcamji.resize(mvTcamji.size());
+        for(int id = 0; id < mvTcamji.size(); id++)
+        {
+            for(int idx = 0; idx <4; idx++)
+            {
+                for(int idy = 0; idy <4; idy++)
+                {
+                    Msg.mvTcamji[id].mTcamji[idx*4 + idy] = mvTcamji[id].at<float>(idx, idy);
+                }
+            }
+        }
 
-        // Msg.mnScaleLevels = static_cast<int8_t>(mnScaleLevels);
-        // Msg.mfScaleFactor = mfScaleFactor;
-        // Msg.mfLogScaleFactor = mfLogScaleFactor;
-        // for(int idx=0;idx<mvScaleFactors.size();++idx) Msg.mvScaleFactors[idx] = mvScaleFactors[idx];
-        // for(int idx=0;idx<mvLevelSigma2.size();++idx) Msg.mvLevelSigma2[idx] = mvLevelSigma2[idx];
-        // for(int idx=0;idx<mvInvLevelSigma2.size();++idx) Msg.mvInvLevelSigma2[idx] = mvInvLevelSigma2[idx];
 
-        // Msg.mnMinX = static_cast<int16_t>(mnMinX);
-        // Msg.mnMinY = static_cast<int16_t>(mnMinY);
-        // Msg.mnMaxX = static_cast<int16_t>(mnMaxX);
-        // Msg.mnMaxY = static_cast<int16_t>(mnMaxY);
+        Msg.mvKeysMultipleUn.resize(mvKeysMultipleUn.size());
+        for(int idx = 0; idx < mvKeysMultipleUn.size(); idx++)  //4
+        {
+            Msg.mvKeysMultipleUn[idx].mvKeysUn.resize(mvKeysMultipleUn[idx].size());
+            for(int idy = 0; idy < mvKeysMultipleUn[idx].size(); idy++)
+            {
+                Msg.mvKeysMultipleUn[idx].mvKeysUn[idy] = Converter::toCvKeyPointMsg(mvKeysMultipleUn[idx][idy]);
+            }
 
-        // Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::KF::_mK_type,float>(mK,Msg.mK);
+        }
 
-        // //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-        // //   ++
-        // //   ++
-        // // ++++++   Map points
-        // //  ++++
-        // //   ++
+        Msg.mvpDescriptors.resize(mvpDescriptors.size());
+        for(int id = 0; id < mvpDescriptors.size(); id++)  //4
+        {   
 
-        // for(int idx=0;idx<mvpMapPoints.size();++idx)
-        // {
-        //     if(mvpMapPoints[idx] && !mvpMapPoints[idx]->isBad())
-        //     {
-        //         Msg.mvpMapPoints_Ids.push_back(static_cast<uint32_t>(mvpMapPoints[idx]->mId.first));
-        //         Msg.mvpMapPoints_ClientIds.push_back(static_cast<uint8_t>(mvpMapPoints[idx]->mId.second));
-        //         Msg.mvpMapPoints_VectId.push_back(static_cast<uint16_t>(idx));
-        //     }
-        // }
+            for(int idx=0;idx<mvpDescriptors[id].rows;++idx) //N
+            {
+                ccmslam_msgs::Descriptor MsgDesc;  //32*1
+                for(int idy=0;idy<mvpDescriptors[id].cols;++idy) //32
+                {
+                    MsgDesc.mDescriptor[idy]= mvpDescriptors[id].at<uint8_t>(idx,idy);
+                }
+                Msg.mvpDescriptors[id].mDescriptors.push_back(MsgDesc);
+            }
+        }
 
-        // //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-        // Msg.mnId = static_cast<uint16_t>(mId.first);
-        // Msg.mClientId = static_cast<uint8_t>(mId.second);
-        // Msg.mUniqueId = static_cast<uint32_t>(mUniqueId);
-        // Msg.dTimestamp = mTimeStamp;
+        for(int idx=0;idx<mDescriptors.rows;++idx)
+        {
+            ccmslam_msgs::Descriptor MsgDesc;
+            for(int idy=0;idy<mDescriptors.cols;++idy)
+            {
+                MsgDesc.mDescriptor[idy]=mDescriptors.at<uint8_t>(idx,idy);
+            }
+            Msg.mDescriptors.push_back(MsgDesc);
+        }
 
-        // msgMap.Keyframes.push_back(Msg);
+        Msg.mnScaleLevels = static_cast<int8_t>(mnScaleLevels);
+        Msg.mfScaleFactor = mfScaleFactor;
+        Msg.mfLogScaleFactor = mfLogScaleFactor;
+        for(int idx=0;idx<mvScaleFactors.size();++idx) Msg.mvScaleFactors[idx] = mvScaleFactors[idx];
+        for(int idx=0;idx<mvLevelSigma2.size();++idx) Msg.mvLevelSigma2[idx] = mvLevelSigma2[idx];
+        for(int idx=0;idx<mvInvLevelSigma2.size();++idx) Msg.mvInvLevelSigma2[idx] = mvInvLevelSigma2[idx];
+
+
+        Msg.mvMinX.resize(mvMinX.size());
+        Msg.mvMinY.resize(mvMinY.size());
+        Msg.mvMaxX.resize(mvMaxX.size());
+        Msg.mvMaxY.resize(mvMaxY.size());
+
+        for(int id = 0; id < cameraNum; id++)
+        {
+            Msg.mvMinX[id] = mvMinX[id];
+            Msg.mvMinY[id] = mvMinY[id];
+            Msg.mvMaxX[id] = mvMaxX[id];
+            Msg.mvMaxY[id] = mvMaxY[id];
+
+        }
+
+        Msg.mvpK.resize(mvpK.size());
+        for(int id = 0; id < mvpK.size();id++)  //4
+        {
+            Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::Vfloat32::_mK_type,float>(mvpK[id],Msg.mvpK[id].mK);
+            
+        }
+
+
+        //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        //   ++
+        //   ++
+        // ++++++   Map points
+        //  ++++
+        //   ++
+
+        for(int index=0;index<mvpMapPoints.size();++index)
+        {
+            if(mvpMapPoints[index] && !mvpMapPoints[index]->isBad())
+            {
+                Msg.mvpMapPoints_Ids.push_back(static_cast<uint32_t>(mvpMapPoints[index]->mId.first));
+                Msg.mvpMapPoints_ClientIds.push_back(static_cast<uint8_t>(mvpMapPoints[index]->mId.second));
+                Msg.mvpMapPoints_VectId.push_back(static_cast<uint16_t>(index));
+            }
+        }
+
+        //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+        Msg.mnId = static_cast<uint16_t>(mId.first);
+        Msg.mClientId = static_cast<uint8_t>(mId.second);
+        Msg.mUniqueId = static_cast<uint32_t>(mUniqueId);
+        Msg.dTimestamp = mTimeStamp;
+
+        msgBMap.BundledKeyframes.push_back(Msg);  
     }
     else
     {
@@ -1343,43 +1459,43 @@ void BundledKeyFrames::UpdateFromMessage(ccmslam_msgs::BKFred *pMsg, g2o::Sim3 m
         mbPoseChanged = false;
         mbUpdatedByServer = true;
     }
-    // else if(mSysState == eSystemState::SERVER)
-    // {
-    //     if(!mbPoseLock)
-    //     {
-    //         if(this->mId.first != 0)
-    //         {
-    //             bool bSetPose = this->SetPoseFromMessage(pMsg,mg2oS_wcurmap_wclientmap);
+    else if(mSysState == eSystemState::SERVER)
+    {
+        if(!mbPoseLock)
+        {
+            if(this->mId.first != 0)
+            {
+                bool bSetPose = this->SetPoseFromMessage(pMsg,mg2oS_wcurmap_wclientmap);
 
-    //             if(!bSetPose)
-    //             {
-    //                 mbOmitSending = false;
-    //                 return;
-    //             }
-    //         }
-    //         else
-    //         {
-    //             //first KF has no parent
+                if(!bSetPose)
+                {
+                    mbOmitSending = false;
+                    return;
+                }
+            }
+            else
+            {
+                //first BKF has no parent
 
-    //             cv::Mat tempTcw = cv::Mat(4,4,5);
-    //             Converter::MsgArrayFixedSizeToCvMat<ccmslam_msgs::KF::_mTcpred_type,float>(tempTcw,pMsg->mTcpred);
-    //             cv::Mat Rcw = tempTcw.rowRange(0,3).colRange(0,3);
-    //             cv::Mat tcw = tempTcw.rowRange(0,3).col(3);
-    //             g2o::Sim3 g2oS_c_wc(Converter::toMatrix3d(Rcw),Converter::toVector3d(tcw),1.0); //cam - world client
+                cv::Mat tempTcw = cv::Mat(4,4,5);
+                Converter::MsgArrayFixedSizeToCvMat<ccmslam_msgs::BKF::_mTcpred_type,float>(tempTcw,pMsg->mTcpred);
+                cv::Mat Rcw = tempTcw.rowRange(0,3).colRange(0,3);
+                cv::Mat tcw = tempTcw.rowRange(0,3).col(3);
+                g2o::Sim3 g2oS_c_wc(Converter::toMatrix3d(Rcw),Converter::toVector3d(tcw),1.0); //cam - world client
 
-    //             g2o::Sim3 g2oS_c_wm = g2oS_c_wc*(mg2oS_wcurmap_wclientmap.inverse()); //cam client - world map
+                g2o::Sim3 g2oS_c_wm = g2oS_c_wc*(mg2oS_wcurmap_wclientmap.inverse()); //cam client - world map
 
-    //             Eigen::Matrix3d eigR = g2oS_c_wm.rotation().toRotationMatrix();
-    //             Eigen::Vector3d eigt = g2oS_c_wm.translation();
-    //             float s = static_cast<float>(mg2oS_wcurmap_wclientmap.scale());
-    //             s = 1/s;
-    //             eigt *=(1./s); //[R t/s;0 1]
-    //             cv::Mat T_c_wm = Converter::toCvSE3(eigR,eigt);
+                Eigen::Matrix3d eigR = g2oS_c_wm.rotation().toRotationMatrix();
+                Eigen::Vector3d eigt = g2oS_c_wm.translation();
+                float s = static_cast<float>(mg2oS_wcurmap_wclientmap.scale());
+                s = 1/s;
+                eigt *=(1./s); //[R t/s;0 1]
+                cv::Mat T_c_wm = Converter::toCvSE3(eigR,eigt);
 
-    //             this->SetPose(T_c_wm,false,true);
-    //         }
-    //     }
-    // }
+                this->SetPose(T_c_wm,false,true);
+            }
+        }
+    }
 
     mbOmitSending = false;
 }
@@ -1430,117 +1546,118 @@ bool BundledKeyFrames::SetPoseFromMessage(ccmslam_msgs::BKFred *pMsg, g2o::Sim3 
 
         this->SetPose(tempTcw,false,true);
     }
-    // else if(mSysState == eSystemState::SERVER)
-    // {
-    //     // SERVER
+    else if(mSysState == eSystemState::SERVER)
+    {
+        // SERVER
 
-    //     if(this->mId.first != 0)
-    //     {
-    //         cv::Mat tempTcp = cv::Mat(4,4,5);
+        if(this->mId.first != 0)
+        {
+            cv::Mat tempTcp = cv::Mat(4,4,5);
 
-    //         kfptr pRef = mpMap->GetKfPtr(pMsg->mpPred_KfId,pMsg->mpPred_KfClientId);
+            bkfptr pRef = mpBMap->GetBKfsPtr(pMsg->mpPred_BKfId,pMsg->mpPred_BKfClientId);
 
-    //         if(pRef)
-    //         {
-    //             Converter::MsgArrayFixedSizeToCvMat<ccmslam_msgs::KF::_mTcpred_type,float>(tempTcp,pMsg->mTcpred);
-    //         }
+            if(pRef)
+            {
+                Converter::MsgArrayFixedSizeToCvMat<ccmslam_msgs::BKF::_mTcpred_type,float>(tempTcp,pMsg->mTcpred);
+            }
 
-    //         if(!pRef)
-    //         {
-    //             pRef = mpMap->GetKfPtr(pMsg->mpPar_KfId,pMsg->mpPar_KfClientId);
+            if(!pRef)
+            {
+                pRef = mpBMap->GetBKfsPtr(pMsg->mpPar_BKfId,pMsg->mpPar_BKfClientId);
 
-    //             if(pRef)
-    //             {
-    //                 Converter::MsgArrayFixedSizeToCvMat<ccmslam_msgs::KF::_mTcpar_type,float>(tempTcp,pMsg->mTcpar);
-    //             }
-    //         }
+                if(pRef)
+                {
+                    Converter::MsgArrayFixedSizeToCvMat<ccmslam_msgs::BKF::_mTcpar_type,float>(tempTcp,pMsg->mTcpar);
+                }
+            }
 
-    //         if(!pRef)
-    //         {
-    //             //check -- maybe we can use erased pointer
-    //             pRef = mpMap->GetErasedKfPtr(pMsg->mpPred_KfId,pMsg->mpPred_KfClientId);
+            if(!pRef)
+            {
+                //check -- maybe we can use erased pointer 
+                //?????????
+                pRef = mpBMap->GetErasedBKfsPtr(pMsg->mpPred_BKfId,pMsg->mpPred_BKfClientId);
 
-    //             if(pRef)
-    //             {
-    //                 Converter::MsgArrayFixedSizeToCvMat<ccmslam_msgs::KF::_mTcpred_type,float>(tempTcp,pMsg->mTcpred);
-    //             }
-    //         }
+                if(pRef)
+                {
+                    Converter::MsgArrayFixedSizeToCvMat<ccmslam_msgs::BKF::_mTcpred_type,float>(tempTcp,pMsg->mTcpred);
+                }
+            }
 
-    //         if(!pRef)
-    //         {
-    //             //check -- maybe we can use erased pointer
-    //             pRef = mpMap->GetErasedKfPtr(pMsg->mpPar_KfId,pMsg->mpPar_KfClientId);
+            if(!pRef)
+            {
+                //check -- maybe we can use erased pointer
+                pRef = mpBMap->GetErasedBKfsPtr(pMsg->mpPar_BKfId,pMsg->mpPar_BKfClientId);
 
-    //             if(pRef)
-    //             {
-    //                 Converter::MsgArrayFixedSizeToCvMat<ccmslam_msgs::KF::_mTcpar_type,float>(tempTcp,pMsg->mTcpar);
-    //             }
-    //         }
+                if(pRef)
+                {
+                    Converter::MsgArrayFixedSizeToCvMat<ccmslam_msgs::BKF::_mTcpar_type,float>(tempTcp,pMsg->mTcpar);
+                }
+            }
 
-    //         if(!pRef)
-    //         {
-    //             //there is no reference pointer available -- ignore this message
-    //             return false;
-    //         }
+            if(!pRef)
+            {
+                //there is no reference pointer available -- ignore this message
+                return false;
+            }
 
-    //         float s = static_cast<float>(mg2oS_wcurmap_wclientmap.scale());
-    //         s = 1/s; //warn
-    //         tempTcp.at<float>(0,3) *=(1./s);
-    //         tempTcp.at<float>(1,3) *=(1./s);
-    //         tempTcp.at<float>(2,3) *=(1./s);
+            float s = static_cast<float>(mg2oS_wcurmap_wclientmap.scale());
+            s = 1/s; //warn
+            tempTcp.at<float>(0,3) *=(1./s);
+            tempTcp.at<float>(1,3) *=(1./s);
+            tempTcp.at<float>(2,3) *=(1./s);
 
-    //         cv::Mat tempTcw = cv::Mat(4,4,5);
+            cv::Mat tempTcw = cv::Mat(4,4,5);
 
-    //         if(!pRef->isBad())
-    //         {
-    //             cv::Mat Tpw = pRef->GetPose();
-    //             tempTcw = tempTcp * Tpw;
-    //         }
-    //         else
-    //         {
-    //             kfptr pRefRef = pRef->GetParent();
+            if(!pRef->isBad())
+            {
+                cv::Mat Tpw = pRef->GetPose();
+                tempTcw = tempTcp * Tpw;
+            }
+            else
+            {
+                bkfptr pRefRef = pRef->GetParent();
 
-    //             if(!pRefRef)
-    //             {
-    //                 cout << "\033[1;31m!!!!! ERROR !!!!!\033[0m " << __func__ << ":"  << __LINE__ << " parent is bad or not existing" << endl;
-    //                 cout << "this: " << this->mId.first << "|" << this->mId.second << endl;
-    //                 cout << "pRef: " << pRef->mId.first << "|" << pRef->mId.second << endl;
-    //                 cout << "!pRefRef" << endl;
-    //                 throw infrastructure_ex();
-    //             }
+                if(!pRefRef)
+                {
+                    cout << "\033[1;31m!!!!! ERROR !!!!!\033[0m " << __func__ << ":"  << __LINE__ << " parent is bad or not existing" << endl;
+                    cout << "this: " << this->mId.first << "|" << this->mId.second << endl;
+                    cout << "pRef: " << pRef->mId.first << "|" << pRef->mId.second << endl;
+                    cout << "!pRefRef" << endl;
+                    throw infrastructure_ex();
+                }
 
-    //             cv::Mat T_p_pp = pRef->mTcp;
+                cv::Mat T_p_pp = pRef->mTcp;
 
-    //             while(pRefRef->isBad())
-    //             {
-    //                 T_p_pp = T_p_pp * pRefRef->mTcp;
+                while(pRefRef->isBad())
+                {
+                    T_p_pp = T_p_pp * pRefRef->mTcp;
 
-    //                 pRefRef = pRefRef->GetParent();
+                    pRefRef = pRefRef->GetParent();
 
-    //                 if(!pRefRef)
-    //                 {
-    //                     cout << "\033[1;31m!!!!! ERROR !!!!!\033[0m " << __func__ << ":"  << __LINE__ << " parent is bad or not existing" << endl;
-    //                     cout << "this: " << this->mId.first << "|" << this->mId.second << endl;
-    //                     cout << "pPred: " << pRef->mId.first << "|" << pRef->mId.second << endl;
-    //                     cout << "!pPredPred" << endl;
-    //                     throw infrastructure_ex();
-    //                 }
-    //             }
+                    if(!pRefRef)
+                    {
+                        cout << "\033[1;31m!!!!! ERROR !!!!!\033[0m " << __func__ << ":"  << __LINE__ << " parent is bad or not existing" << endl;
+                        cout << "this: " << this->mId.first << "|" << this->mId.second << endl;
+                        cout << "pPred: " << pRef->mId.first << "|" << pRef->mId.second << endl;
+                        cout << "!pPredPred" << endl;
+                        throw infrastructure_ex();
+                    }
+                }
 
-    //             cv::Mat T_pp_w = pRefRef->GetPose();
-    //             tempTcw = tempTcp * T_p_pp * T_pp_w;
-    //         }
+                cv::Mat T_pp_w = pRefRef->GetPose();
+                tempTcw = tempTcp * T_p_pp * T_pp_w;
+            }
 
-    //         this->SetPose(tempTcw,false,true);
-    //     }
-    //     else
-    //     {
-    //         //first KF has no parent
+            this->SetPose(tempTcw,false,true);
+        }
+        else
+        {
+            //first KF has no parent
 
-    //         cout << "\033[1;31m!!!!! ERROR !!!!!\033[0m " << __func__ << ":" << __LINE__ << " must not be called for KF 0" << endl;
-    //         throw estd::infrastructure_ex();
-    //     }
-    // }
+            cout << "\033[1;31m!!!!! ERROR !!!!!\033[0m " << __func__ << ":" << __LINE__ << " must not be called for KF 0" << endl;
+            throw estd::infrastructure_ex();
+        }
+    }
 
     return true;
 }
@@ -1740,12 +1857,9 @@ void BundledKeyFrames::WriteMembersFromMessage(ccmslam_msgs::BKF *pMsg, g2o::Sim
     for(int id = 0; id < cameraNum; id++)
     {
         mvMinX[id] = pMsg->mvMinX[id];
-        vfy[id] = pMsg->vfy[id];
-        vcx[id]=pMsg->vcx[id];
-        vcy[id]=pMsg->vcy[id];
-        vinvfx[id]=pMsg->vinvfx[id];
-        vinvfy[id]=pMsg->vinvfy[id];
-
+        mvMaxX[id] = pMsg->mvMaxX[id];
+        mvMinY[id]=pMsg->mvMinY[id];
+        mvMaxY[id]=pMsg->mvMaxY[id];
     }
 
     mvKeysMultipleUn.resize(pMsg->mvKeysMultipleUn.size());  //4
@@ -1870,40 +1984,40 @@ void BundledKeyFrames::WriteMembersFromMessage(ccmslam_msgs::BKF *pMsg, g2o::Sim
             return;
         }
     }
-    // else if(mSysState == eSystemState::SERVER)
-    // {
-    //     // SERVER
+    else if(mSysState == eSystemState::SERVER)
+    {
+        // SERVER
 
-    //     cv::Mat T_SC = cv::Mat(4,4,5);
-    //     Converter::MsgArrayFixedSizeToCvMat<ccmslam_msgs::KF::_mT_SC_type,float>(T_SC,pMsg->mT_SC);
-    //     mT_SC = Converter::toMatrix4d(T_SC);
+        cv::Mat T_SC = cv::Mat(4,4,5);
+        Converter::MsgArrayFixedSizeToCvMat<ccmslam_msgs::BKF::_mT_SC_type,float>(T_SC,pMsg->mT_SC);
+        mT_SC = Converter::toMatrix4d(T_SC);
 
-    //     if(this->mId.first != 0)
-    //     {
-    //         bool bSetPose = this->SetPoseFromMessage(pMsg,mg2oS_wcurmap_wclientmap);
+        if(this->mId.first != 0)
+        {
+            bool bSetPose = this->SetPoseFromMessage(pMsg,mg2oS_wcurmap_wclientmap);
 
-    //         if(!bSetPose)
-    //         {
-    //             mvpMapPoints.clear();
-    //             mbBad = true;
-    //             return;
-    //         }
-    //     }
-    //     else
-    //     {
-    //         //first KF has no parent
+            if(!bSetPose)
+            {
+                mvpMapPoints.clear();
+                mbBad = true;
+                return;
+            }
+        }
+        else
+        {
+            //first BKF has no parent
 
-    //         cv::Mat tempTcw = cv::Mat(4,4,5);
-    //         Converter::MsgArrayFixedSizeToCvMat<ccmslam_msgs::KF::_mTcpred_type,float>(tempTcw,pMsg->mTcpred);
+            cv::Mat tempTcw = cv::Mat(4,4,5);
+            Converter::MsgArrayFixedSizeToCvMat<ccmslam_msgs::BKF::_mTcpred_type,float>(tempTcw,pMsg->mTcpred);
 
-    //         float s = static_cast<float>(mg2oS_wcurmap_wclientmap.scale());
-    //         tempTcw.at<float>(0,3) /=(1./s);
-    //         tempTcw.at<float>(1,3) /=(1./s);
-    //         tempTcw.at<float>(2,3) /=(1./s);
+            float s = static_cast<float>(mg2oS_wcurmap_wclientmap.scale());
+            tempTcw.at<float>(0,3) /=(1./s);
+            tempTcw.at<float>(1,3) /=(1./s);
+            tempTcw.at<float>(2,3) /=(1./s);
 
-    //         this->SetPose(tempTcw,false);
-    //     }
-    // }
+            this->SetPose(tempTcw,false);
+        }
+    }
 }
 
 void BundledKeyFrames::AssignFeaturesToGrid(const int &cameraId)
@@ -2123,6 +2237,12 @@ set<BundledKeyFrames::mpptr> BundledKeyFrames::GetMapPoints()
             s.insert(pMP);
     }
     return s;
+}
+
+bool BundledKeyFrames::IsMpLocked(const size_t &index)
+{
+    unique_lock<mutex> lock(mMutexFeatures);
+    return mvbMapPointsLock[index];
 }
 
 void BundledKeyFrames::RemapMapPointMatch(mpptr pMP, const size_t &index_now, const size_t &index_new)

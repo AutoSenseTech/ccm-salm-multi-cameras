@@ -312,6 +312,18 @@ void BundledMap::SetReferenceMapPoints(const vector<mpptr> &vpMPs)
     mvpReferenceMapPoints = vpMPs;
 }
 
+void BundledMap::clear()
+{
+    mmpMapPoints.clear();
+    mmpBundledKeyFrames.clear();
+    mmpErasedMapPoints.clear();
+    mmpErasedBundledKeyFrames.clear();
+    mnMaxBKFsid = 0;
+    mnMaxMPid = 0;
+    mvpReferenceMapPoints.clear();
+    mvpBundledKeyFramesOrigins.clear();
+}
+
 BundledMap::bkfptr BundledMap::GetBKfsPtr(size_t BKfsId, size_t ClientId, bool bIgnoreMutex) //Performance: find a better implementation for this method
 {
     if(!bIgnoreMutex)
@@ -455,6 +467,28 @@ BundledMap::mpptr BundledMap::GetMpPtr(size_t MpId, size_t ClientId)
     std::map<idpair,mpptr>::iterator mit = mmpMapPoints.find(idp);
     if(mit != mmpMapPoints.end()) return mit->second;
     else return nullptr;
+}
+
+bool BundledMap::IsBKfDeleted(size_t BKfId, size_t ClientId)
+{
+    unique_lock<mutex> lock2(mMutexBMap);
+    unique_lock<mutex> lock(mMutexErased);
+
+    idpair idp = make_pair(BKfId,ClientId);
+    std::map<idpair,bkfptr>::iterator mit = mmpErasedBundledKeyFrames.find(idp);
+    if(mit != mmpErasedBundledKeyFrames.end()) return true;
+    else return false;
+}
+
+bool BundledMap::IsMpDeleted(size_t MpId, size_t ClientId)
+{
+    unique_lock<mutex> lock2(mMutexBMap);
+    unique_lock<mutex> lock(mMutexErased);
+
+    idpair idp = make_pair(MpId,ClientId);
+    std::map<idpair,mpptr>::iterator mit = mmpErasedMapPoints.find(idp);
+    if(mit != mmpErasedMapPoints.end()) return true;
+    else return false;
 }
 
 void BundledMap::AddCCPtr(ccptr pCC)
@@ -987,6 +1021,99 @@ void BundledMap::MapTrimming(bkfptr pBKFcur)
         std::cout << "BKFs after erasing: " << mmpBundledKeyFrames.size() << std::endl;
     }
 }
+
+void BundledMap::PackVicinityToMsg(bkfptr pBKFcur, ccmslam_msgs::BMap &msgBMap, ccptr pCC)
+{
+    if(pBKFcur->mId.first == 0)
+        return; //we do not send the origin BKFs
+    //max == -1 means there is no upper limit
+    int max = params::comm::server::miKfLimitToClient;
+
+    unique_lock<mutex> lock(mMutexBMap);
+    unique_lock<mutex> lock2(mMutexErased);
+
+    set<bkfptr> sBKfsVicinity;
+    set<mpptr> sMpVicinity;
+    sBKfsVicinity.insert(pBKFcur);
+    set<bkfptr> spBKFsAddedLastIteration;
+    spBKFsAddedLastIteration.insert(pBKFcur);
+
+    pBKFcur->UpdateConnections(true);
+
+    //add BKFs from CovGraph
+    int depth = max;
+    for(int it = 1;it<=depth;++it)
+    {
+        set<bkfptr> spAdd; //do not insert into sKfVicinity while iterating it
+
+        for(set<bkfptr>::iterator sit = spBKFsAddedLastIteration.begin();sit!=spBKFsAddedLastIteration.end();++sit)
+        {
+            bkfptr pBKFi = *sit;
+            if(pBKFi->mId.first == 0) continue; //we do not send the origin BKFs
+
+            vector<BundledKeyFrames::bkfptr> vCovBKfs = pBKFi->GetVectorCovisibleBundledKeyFrames();
+
+            for(vector<bkfptr>::iterator vit = vCovBKfs.begin();vit!=vCovBKfs.end();++vit)
+            {
+                bkfptr pBKFj = *vit;
+                if(!pBKFj || pBKFj->isBad()) continue;
+                if(pBKFj->mId.first == 0) continue; //we do not send the origin KFs
+                spAdd.insert(pBKFj);
+
+                if((max != -1) && (sBKfsVicinity.size() + spAdd.size()) >= max)
+                {
+                    break;
+                }
+            }
+
+            if((max != -1) && (sBKfsVicinity.size() + spAdd.size()) >= max)
+                break;
+        }
+
+        sBKfsVicinity.insert(spBKFsAddedLastIteration.begin(),spBKFsAddedLastIteration.end());
+        spBKFsAddedLastIteration = spAdd;
+
+        if((max != -1) && (sBKfsVicinity.size() >= max))
+            break;
+
+        if(spBKFsAddedLastIteration.empty())
+            break;
+    }
+
+    //add MPs included by the BKFs
+    for(set<bkfptr>::iterator sit = sBKfsVicinity.begin();sit!=sBKfsVicinity.end();++sit)
+    {
+        bkfptr pBKFi = *sit;
+        vector<mpptr> vMPs = pBKFi->GetMapPointMatches();
+
+        for(vector<mpptr>::iterator vit = vMPs.begin();vit!=vMPs.end();++vit)
+        {
+            mpptr pMPi = *vit;
+            if(!pMPi || pMPi->isBad()) continue;
+
+            sMpVicinity.insert(pMPi);
+        }
+    }
+
+    pBKFcur->ConvertToMessage(msgBMap,pCC->mg2oS_wcurmap_wclientmap,pBKFcur); //make sure this is first KF in vector
+
+    for(set<bkfptr>::iterator sit = sBKfsVicinity.begin();sit!=sBKfsVicinity.end();++sit)
+    {
+        bkfptr pBKFi = *sit;
+
+        if(pBKFi->mId == pBKFcur->mId)
+            continue; //do not enter twice
+
+        pBKFi->ConvertToMessage(msgBMap,pCC->mg2oS_wcurmap_wclientmap,pBKFcur);
+    }
+
+    for(set<mpptr>::iterator sit = sMpVicinity.begin();sit != sMpVicinity.end();++sit)
+    {
+        mpptr pMPi = *sit;
+        pMPi->ConvertToMessage(msgBMap,pBKFcur,pCC->mg2oS_wcurmap_wclientmap);
+    }
+}
+
 
 bool BundledMap::bkftimecmp::operator ()(const bkfptr pA, const bkfptr pB) const
 {

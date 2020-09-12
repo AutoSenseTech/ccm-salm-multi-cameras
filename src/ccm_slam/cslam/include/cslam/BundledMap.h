@@ -89,6 +89,10 @@ public:
     mpptr GetMpPtr(idpair id){return GetMpPtr(id.first,id.second);} 
     bkfptr GetErasedBKfsPtr(size_t BKfsId, size_t ClientId);
     bkfptr GetErasedBKfsPtr(idpair id){return GetErasedBKfsPtr(id.first,id.second);}
+    bool IsBKfDeleted(size_t BKfId, size_t ClientId);
+    bool IsBKfDeleted(idpair id){return IsBKfDeleted(id.first,id.second);}
+    bool IsMpDeleted(size_t MpId, size_t ClientId);
+    bool IsMpDeleted(idpair id){return IsMpDeleted(id.first,id.second);}
 
     vector<bkfptr> GetAllBundledKeyFrames();
     vector<mpptr> GetAllMapPoints();
@@ -114,7 +118,11 @@ public:
 //---map management---
     void MapTrimming(bkfptr pBKFcur);
     void FindLocalBKFsByTime(bkfptr pBKFcur,set<bkfptr>& sBKfsVicinity,priority_queue<int>& pqNativeBKFs,list<bkfptr>& lForeignBKFs, int nLocalBKFs);
+    void PackVicinityToMsg(bkfptr pBKFcur, ccmslam_msgs::BMap &msgBMap, ccptr pCC);
     set<mpptr> mspMPsToErase;
+    
+    //---Reset---
+    void clear();
     
 //---mutexes & sync---
     bool LockBMapUpdate(){unique_lock<mutex> lock(mMutexBMapUpdate); if(!mbLockBMapUpdate){mbLockBMapUpdate = true; return true;} else return false;}

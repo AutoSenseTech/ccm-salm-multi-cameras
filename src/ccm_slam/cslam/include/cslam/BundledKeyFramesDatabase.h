@@ -52,7 +52,11 @@ public:
     // Relocalization
     std::vector<bkfptr> DetectRelocalizationCandidates(Frame& F);
 
- 
+    typedef boost::shared_ptr<MapPoint> mpptr;
+    map<idpair,mpptr> mmpMPs;
+    map<idpair,bool> mmbDirectBad;
+    mutex mMutexMPs;
+    void ResetMPs();
 
 protected:
 

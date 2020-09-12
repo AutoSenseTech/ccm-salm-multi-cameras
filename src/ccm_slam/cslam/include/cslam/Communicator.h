@@ -225,6 +225,7 @@ public:
     void PublishMapClient();
     double mdLastTimePub;
     void ProcessKfInServer();
+    void ProcessBKfsInServer();
     void ProcessKfInClient();
     void ProcessBKfsInClient();
 
@@ -248,8 +249,10 @@ public:
     list<bkfptr> mlpAddedBKfs;
 
     set<size_t> msAcksKF;
+    set<size_t> msAcksBKF;
     set<size_t> msAcksMP;
     void SetWeakAckKF(size_t id);
+    void SetWeakAckBKF(size_t id);
     void SetWeakAckMP(size_t id);
     size_t mnWeakAckKF;
     size_t mnWeakAckBKFs;
@@ -262,7 +265,9 @@ public:
     void ResetIfRequested();
     void ResetCommunicator();
     void ResetDatabase();
+    void ResetBundledKeyframeDatabase();
     void ResetMap();
+    void ResetBMap();
     void ResetMapping();
     void ResetMapMatcher();
     bool mbResetRequested;

@@ -229,7 +229,7 @@ void MapPoint::EstablishInitialConnectionsServer()
     ccptr pCC;
     if(this->mSysState == SERVER)
     {
-        pCC = mpMap->GetCCPtr(this->mId.second);
+        pCC = mpBMap->GetCCPtr(this->mId.second);
         pCC->mpLogger->SetMP(__LINE__,this->mId.second);
     }
     #endif
@@ -245,18 +245,18 @@ void MapPoint::EstablishInitialConnectionsServer()
         pCC->mpLogger->SetMP(__LINE__,this->mId.second);
         #endif
 
-        for(map<kfptr,size_t>::iterator mit = mObservations.begin();mit != mObservations.end();)
+        for(map<bkfptr,size_t>::iterator mit = mObservationsBKFs.begin();mit != mObservationsBKFs.end();)
         {
-            kfptr pKFi = mit->first;
-            size_t idx = mit->second;
+            bkfptr pBKFi = mit->first;
+            size_t index = mit->second;
 
-            if(pKFi)
+            if(pBKFi)
             {
                 #ifdef TRACELOCK
                 pCC->mpLogger->SetMP(__LINE__,this->mId.second);
                 #endif
 
-                mpptr pMP = pKFi->GetMapPoint(idx);
+                mpptr pMP = pBKFi->GetMapPoint(index);
 
                 #ifdef TRACELOCK
                 pCC->mpLogger->SetMP(__LINE__,this->mId.second);
@@ -273,20 +273,20 @@ void MapPoint::EstablishInitialConnectionsServer()
                     if(shared_from_this()->mId == pMP->mId)
                     {
                         //But it's this MP, and we're calling the constructor -- thats inconsistent
-                        cout << "\033[1;31m!!!!! FATAL ERROR !!!!!\033[0m " << __func__ << __LINE__ << "Constructing MP & is already associated to KF" << endl;
-                        cout << "KF-ID: " << pKFi->mId.first << "|" << pKFi->mId.second << " --- this MP-ID: " << this->mId.first << "|" << this->mId.second << " --- comp. MP-ID: " << pMP->mId.first << "|" << pMP->mId.second << endl;
+                        cout << "\033[1;31m!!!!! FATAL ERROR !!!!!\033[0m " << __func__ << __LINE__ << "Constructing MP & is already associated to BKF" << endl;
+                        cout << "BKF-ID: " << pBKFi->mId.first << "|" << pBKFi->mId.second << " --- this MP-ID: " << this->mId.first << "|" << this->mId.second << " --- comp. MP-ID: " << pMP->mId.first << "|" << pMP->mId.second << endl;
                         throw infrastructure_ex();
                     }
-                    else if(!pKFi->IsMpLocked(idx))
+                    else if(!pBKFi->IsMpLocked(index))
                     {
-                        pKFi->ReplaceMapPointMatch(idx,shared_from_this(),false);
-                        pMP->EraseObservation(pKFi);
+                        pBKFi->ReplaceMapPointMatch(index,shared_from_this(),false);
+                        pMP->EraseBKFsObservation(pBKFi, pBKFi->cameraNum);
                     }
                     else
                     {
                         //its locked - cannot replace
                         //delete KF association
-                        mit = mObservations.erase(mit);
+                        mit = mObservationsBKFs.erase(mit);
                         nObs--;
                         continue;
                     }
@@ -298,12 +298,12 @@ void MapPoint::EstablishInitialConnectionsServer()
                 else
                 {
                     //nothing associated to this feature, we can add
-                    pKFi->AddMapPoint(shared_from_this(),idx,false);
+                    pBKFi->AddMapPoint(shared_from_this(),index,false);
                 }
             }
             else
             {
-                cout << "\033[1;31m!!!!! ERROR !!!!!\033[0m " << __func__ << __LINE__ << " pKFi is NULLPTR" << endl;
+                cout << "\033[1;31m!!!!! ERROR !!!!!\033[0m " << __func__ << __LINE__ << " pBKFi is NULLPTR" << endl;
             }
 
             ++mit;
@@ -322,11 +322,11 @@ void MapPoint::EstablishInitialConnectionsServer()
             return;
         }
 
-        mpRefKF = mObservations.begin()->first; //should not be bad, we checked that when we added the KF
+        mpRefBKFs = mObservationsBKFs.begin()->first; //should not be bad, we checked that when we added the KF
 
-        if(mpRefKF->isBad())
+        if(mpRefBKFs->isBad())
         {
-            cout << "\033[1;31m!!!!! ERROR !!!!!\033[0m " << __func__ << __LINE__ << ": mpRefKF is BAD" << endl;
+            cout << "\033[1;31m!!!!! ERROR !!!!!\033[0m " << __func__ << __LINE__ << ": mpRefBKFs is BAD" << endl;
         }
     }
 
@@ -334,7 +334,7 @@ void MapPoint::EstablishInitialConnectionsServer()
     pCC->mpLogger->SetMP(__LINE__,this->mId.second);
     #endif
 
-    this->UpdateNormalAndDepth();
+    this->UpdateNormalAndDepthPlus();
 
     #ifdef LOGGING
     pCC->mpLogger->SetMP(__LINE__,this->mId.second);
@@ -1625,7 +1625,183 @@ void MapPoint::ReduceMessage(ccmslam_msgs::MP *pMsgFull, ccmslam_msgs::MPred *pM
     
 }
 
-void MapPoint::ConvertToMessage(ccmslam_msgs::Map &msgMap, kfptr pRefKf, g2o::Sim3 mg2oS_wcurmap_wclientmap, bool bForceUpdateMsg)
+// void MapPoint::ConvertToMessage(ccmslam_msgs::Map &msgMap, kfptr pRefKf, g2o::Sim3 mg2oS_wcurmap_wclientmap, bool bForceUpdateMsg)
+// {
+//     unique_lock<mutex> lockOut(mMutexOut);
+
+//     if((mbSendFull || mSysState == eSystemState::SERVER) && !bForceUpdateMsg)
+//     {
+//         ccmslam_msgs::MP Msg;
+
+//         unique_lock<mutex> lockFeat(mMutexFeatures,defer_lock);
+//         unique_lock<mutex> lockPos(mMutexPos,defer_lock);
+
+//         lock(lockFeat,lockPos);
+
+//         Msg.mpPredKFId = static_cast<uint16_t>(pRefKf->mId.first);
+//         Msg.mpPredKFClientId = static_cast<uint8_t>(pRefKf->mId.second);
+
+//         if(mSysState == eSystemState::SERVER)
+//         {
+//             cv::Mat Tpw = pRefKf->GetPose();
+//             cv::Mat Rpw = Tpw.rowRange(0,3).colRange(0,3);
+//             cv::Mat tpw = Tpw.rowRange(0,3).col(3);
+
+//             cv::Mat P3D_p = Rpw * mWorldPos + tpw;
+
+//             float s = static_cast<double>(mg2oS_wcurmap_wclientmap.inverse().scale());
+//             s = 1/s;
+
+//             P3D_p *=(1./s);
+
+//             Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::MP::_mPosPred_type,float>(P3D_p,Msg.mPosPred);
+
+//             Msg.mpParKFId = KFRANGE;
+//             Msg.mpParKFClientId = MAPRANGE;
+
+//             Msg.bSentOnce = mbSentOnce;
+
+//             ccptr pCC = mpMap->GetCCPtr(mId.second);
+//             if(pCC->mbOptimized)
+//                 Msg.mbPoseChanged = true;
+//             else
+//                 Msg.mbPoseChanged = mbPoseChanged;
+
+//             Msg.mbServerBA = false;
+//         }
+//         else
+//         {
+//             cv::Mat Rcw = pRefKf->GetPose().rowRange(0,3).colRange(0,3);
+//             cv::Mat tcw = pRefKf->GetPose().rowRange(0,3).col(3);
+
+//             cv::Mat RefPos = Rcw * mWorldPos + tcw;
+
+//             Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::MP::_mPosPred_type,float>(RefPos,Msg.mPosPred);
+
+//             if(mpRefKF)
+//             {
+//                 Msg.mpParKFId = static_cast<uint16_t>(mpRefKF->mId.first);
+//                 Msg.mpParKFClientId = static_cast<uint8_t>(mpRefKF->mId.second);
+
+//                 cv::Mat Rparcw = mpRefKF->GetPose().rowRange(0,3).colRange(0,3);
+//                 cv::Mat tparcw = mpRefKF->GetPose().rowRange(0,3).col(3);
+
+//                 cv::Mat ParPos = Rparcw * mWorldPos + tparcw;
+
+//                 Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::MP::_mPosPar_type,float>(ParPos,Msg.mPosPar);
+//             }
+//             else
+//             {
+//                 Msg.mpParKFId = KFRANGE;
+//                 Msg.mpParKFClientId = MAPRANGE;
+//                 cout << "\033[1;33m!!! WARN !!!\033[0m " << __func__ << ":" << __LINE__ << " no Parent" << endl;
+//             }
+
+//             Msg.mbAck = mbAck;
+
+//             Msg.bSentOnce = mbSentOnce;
+//             mbSentOnce = true;
+//             mbPoseChanged = false;
+//             mbSendFull = false;
+
+//             Msg.mbServerBA = false;
+//         }
+
+//         //Normal Vector
+
+//         Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::MP::_mNormalVector_type,float>(mNormalVector,Msg.mNormalVector);
+
+//         //Descriptor
+
+//         Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::MP::_mDescriptor_type,uint8_t>(mDescriptor,Msg.mDescriptor);
+
+//         //Observation
+
+//         for(std::map<bkfptr,size_t>::const_iterator mit=mObservationsBKFs.begin();mit!=mObservationsBKFs.end();++mit)
+//         {
+//             if(!mit->first->isBad())
+//             {
+//                 Msg.mObservations_BKFIDs.push_back(static_cast<uint16_t>(mit->first->mId.first));
+//                 Msg.mObservations_BKFClientIDs.push_back(static_cast<uint8_t>(mit->first->mId.second));
+//                 Msg.mObservations_n.push_back(static_cast<uint16_t>(mit->second));
+//             }
+//         }
+
+//         Msg.mfMinDistance = mfMinDistance;
+//         Msg.mfMaxDistance = mfMaxDistance;
+
+//         Msg.mbBad = mbBad;
+//         Msg.mnId = static_cast<uint32_t>(mId.first);
+//         Msg.mClientId = static_cast<uint8_t>(mId.second);
+//         Msg.mUniqueId = mUniqueId;
+
+//         Msg.mnFirstBKFid = static_cast<uint16_t>(mFirstBKfsId.first);
+//         Msg.mnFirstBKfClientId = static_cast<uint8_t>(mFirstBKfsId.second);
+
+//         Msg.mbMultiUse = mbMultiUse;
+
+//         msgBMap.MapPoints.push_back(Msg);
+//     }
+//     else
+//     {
+//         if(mSysState == eSystemState::SERVER)
+//         {
+//             cout << "\033[1;31m!!!!! FATAL !!!!!\033[0m " << __func__ << ":"  << __LINE__ << " must no be used by server" << endl;
+//             throw infrastructure_ex();
+//         }
+
+//         ccmslam_msgs::MPred Msg;
+
+//         unique_lock<mutex> lockPos(mMutexPos);
+
+//         if(mbPoseChanged || this->mbMultiUse) // this part should only be called on client. System will send MP without pose change to server to inform it about a "MultiUse-Event"
+//         {
+//             Msg.mpPredKFId = static_cast<uint16_t>(pRefKf->mId.first);
+//             Msg.mpPredKFClientId = static_cast<uint8_t>(pRefKf->mId.second);
+
+//             cv::Mat Rcw = pRefKf->GetPose().rowRange(0,3).colRange(0,3);
+//             cv::Mat tcw = pRefKf->GetPose().rowRange(0,3).col(3);
+
+//             cv::Mat RefPos = Rcw * mWorldPos + tcw;
+
+//             Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::MP::_mPosPred_type,float>(RefPos,Msg.mPosPred);
+
+//             if(mpRefKF)
+//             {
+//                 Msg.mpParKFId = static_cast<uint16_t>(mpRefKF->mId.first);
+//                 Msg.mpParKFClientId = static_cast<uint8_t>(mpRefKF->mId.second);
+
+//                 cv::Mat Rparcw = mpRefKF->GetPose().rowRange(0,3).colRange(0,3);
+//                 cv::Mat tparcw = mpRefKF->GetPose().rowRange(0,3).col(3);
+
+//                 cv::Mat ParPos = Rparcw * mWorldPos + tparcw;
+
+//                 Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::MP::_mPosPar_type,float>(ParPos,Msg.mPosPar);
+//             }
+//             else
+//             {
+//                 Msg.mpParKFId = KFRANGE;
+//                 Msg.mpParKFClientId = MAPRANGE;
+//                 cout << "\033[1;33m!!! WARN !!!\033[0m " << __func__ << ":" << __LINE__ << " no Parent" << endl;
+//             }
+
+//             Msg.mbServerBA = false;
+
+//             mbPoseChanged = false;
+
+//             Msg.mbBad = mbBad;
+//             Msg.mnId = static_cast<uint32_t>(mId.first);
+//             Msg.mClientId = static_cast<uint8_t>(mId.second);
+//             Msg.mUniqueId = mUniqueId;
+//             Msg.mbMultiUse = mbMultiUse;
+//             Msg.mbAck = mbAck;
+
+//             msgMap.MPUpdates.push_back(Msg);
+//         }
+//     }
+// }
+
+void MapPoint::ConvertToMessage(ccmslam_msgs::BMap &msgBMap, bkfptr pRefBKf, g2o::Sim3 mg2oS_wcurmap_wclientmap, bool bForceUpdateMsg)
 {
     unique_lock<mutex> lockOut(mMutexOut);
 
@@ -1638,12 +1814,12 @@ void MapPoint::ConvertToMessage(ccmslam_msgs::Map &msgMap, kfptr pRefKf, g2o::Si
 
         lock(lockFeat,lockPos);
 
-        Msg.mpPredKFId = static_cast<uint16_t>(pRefKf->mId.first);
-        Msg.mpPredKFClientId = static_cast<uint8_t>(pRefKf->mId.second);
+        Msg.mpPredBKFId = static_cast<uint16_t>(pRefBKf->mId.first);
+        Msg.mpPredBKFClientId = static_cast<uint8_t>(pRefBKf->mId.second);
 
         if(mSysState == eSystemState::SERVER)
         {
-            cv::Mat Tpw = pRefKf->GetPose();
+            cv::Mat Tpw = pRefBKf->GetPose();
             cv::Mat Rpw = Tpw.rowRange(0,3).colRange(0,3);
             cv::Mat tpw = Tpw.rowRange(0,3).col(3);
 
@@ -1656,12 +1832,12 @@ void MapPoint::ConvertToMessage(ccmslam_msgs::Map &msgMap, kfptr pRefKf, g2o::Si
 
             Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::MP::_mPosPred_type,float>(P3D_p,Msg.mPosPred);
 
-            Msg.mpParKFId = KFRANGE;
-            Msg.mpParKFClientId = MAPRANGE;
+            Msg.mpParBKFId = KFRANGE;
+            Msg.mpParBKFClientId = MAPRANGE;
 
             Msg.bSentOnce = mbSentOnce;
 
-            ccptr pCC = mpMap->GetCCPtr(mId.second);
+            ccptr pCC = mpBMap->GetCCPtr(mId.second);
             if(pCC->mbOptimized)
                 Msg.mbPoseChanged = true;
             else
@@ -1671,20 +1847,20 @@ void MapPoint::ConvertToMessage(ccmslam_msgs::Map &msgMap, kfptr pRefKf, g2o::Si
         }
         else
         {
-            cv::Mat Rcw = pRefKf->GetPose().rowRange(0,3).colRange(0,3);
-            cv::Mat tcw = pRefKf->GetPose().rowRange(0,3).col(3);
+            cv::Mat Rcw = pRefBKf->GetPose().rowRange(0,3).colRange(0,3);
+            cv::Mat tcw = pRefBKf->GetPose().rowRange(0,3).col(3);
 
             cv::Mat RefPos = Rcw * mWorldPos + tcw;
 
             Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::MP::_mPosPred_type,float>(RefPos,Msg.mPosPred);
 
-            if(mpRefKF)
+            if(mpRefBKFs)
             {
-                Msg.mpParKFId = static_cast<uint16_t>(mpRefKF->mId.first);
-                Msg.mpParKFClientId = static_cast<uint8_t>(mpRefKF->mId.second);
+                Msg.mpParBKFId = static_cast<uint16_t>(mpRefBKFs->mId.first);
+                Msg.mpParBKFClientId = static_cast<uint8_t>(mpRefBKFs->mId.second);
 
-                cv::Mat Rparcw = mpRefKF->GetPose().rowRange(0,3).colRange(0,3);
-                cv::Mat tparcw = mpRefKF->GetPose().rowRange(0,3).col(3);
+                cv::Mat Rparcw = mpRefBKFs->GetPose().rowRange(0,3).colRange(0,3);
+                cv::Mat tparcw = mpRefBKFs->GetPose().rowRange(0,3).col(3);
 
                 cv::Mat ParPos = Rparcw * mWorldPos + tparcw;
 
@@ -1692,8 +1868,8 @@ void MapPoint::ConvertToMessage(ccmslam_msgs::Map &msgMap, kfptr pRefKf, g2o::Si
             }
             else
             {
-                Msg.mpParKFId = KFRANGE;
-                Msg.mpParKFClientId = MAPRANGE;
+                Msg.mpParBKFId = KFRANGE;
+                Msg.mpParBKFClientId = MAPRANGE;
                 cout << "\033[1;33m!!! WARN !!!\033[0m " << __func__ << ":" << __LINE__ << " no Parent" << endl;
             }
 
@@ -1717,12 +1893,12 @@ void MapPoint::ConvertToMessage(ccmslam_msgs::Map &msgMap, kfptr pRefKf, g2o::Si
 
         //Observation
 
-        for(std::map<kfptr,size_t>::const_iterator mit=mObservations.begin();mit!=mObservations.end();++mit)
+        for(std::map<bkfptr,size_t>::const_iterator mit=mObservationsBKFs.begin();mit!=mObservationsBKFs.end();++mit)
         {
             if(!mit->first->isBad())
             {
-                Msg.mObservations_KFIDs.push_back(static_cast<uint16_t>(mit->first->mId.first));
-                Msg.mObservations_KFClientIDs.push_back(static_cast<uint8_t>(mit->first->mId.second));
+                Msg.mObservations_BKFIDs.push_back(static_cast<uint16_t>(mit->first->mId.first));
+                Msg.mObservations_BKFClientIDs.push_back(static_cast<uint8_t>(mit->first->mId.second));
                 Msg.mObservations_n.push_back(static_cast<uint16_t>(mit->second));
             }
         }
@@ -1735,188 +1911,12 @@ void MapPoint::ConvertToMessage(ccmslam_msgs::Map &msgMap, kfptr pRefKf, g2o::Si
         Msg.mClientId = static_cast<uint8_t>(mId.second);
         Msg.mUniqueId = mUniqueId;
 
-        Msg.mnFirstKFid = static_cast<uint16_t>(mFirstKfId.first);
-        Msg.mnFirstKfClientId = static_cast<uint8_t>(mFirstKfId.second);
+        Msg.mnFirstBKFid = static_cast<uint16_t>(mFirstBKfsId.first);
+        Msg.mnFirstBKfClientId = static_cast<uint8_t>(mFirstBKfsId.second);
 
         Msg.mbMultiUse = mbMultiUse;
 
-        msgMap.MapPoints.push_back(Msg);
-    }
-    else
-    {
-        if(mSysState == eSystemState::SERVER)
-        {
-            cout << "\033[1;31m!!!!! FATAL !!!!!\033[0m " << __func__ << ":"  << __LINE__ << " must no be used by server" << endl;
-            throw infrastructure_ex();
-        }
-
-        ccmslam_msgs::MPred Msg;
-
-        unique_lock<mutex> lockPos(mMutexPos);
-
-        if(mbPoseChanged || this->mbMultiUse) // this part should only be called on client. System will send MP without pose change to server to inform it about a "MultiUse-Event"
-        {
-            Msg.mpPredKFId = static_cast<uint16_t>(pRefKf->mId.first);
-            Msg.mpPredKFClientId = static_cast<uint8_t>(pRefKf->mId.second);
-
-            cv::Mat Rcw = pRefKf->GetPose().rowRange(0,3).colRange(0,3);
-            cv::Mat tcw = pRefKf->GetPose().rowRange(0,3).col(3);
-
-            cv::Mat RefPos = Rcw * mWorldPos + tcw;
-
-            Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::MP::_mPosPred_type,float>(RefPos,Msg.mPosPred);
-
-            if(mpRefKF)
-            {
-                Msg.mpParKFId = static_cast<uint16_t>(mpRefKF->mId.first);
-                Msg.mpParKFClientId = static_cast<uint8_t>(mpRefKF->mId.second);
-
-                cv::Mat Rparcw = mpRefKF->GetPose().rowRange(0,3).colRange(0,3);
-                cv::Mat tparcw = mpRefKF->GetPose().rowRange(0,3).col(3);
-
-                cv::Mat ParPos = Rparcw * mWorldPos + tparcw;
-
-                Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::MP::_mPosPar_type,float>(ParPos,Msg.mPosPar);
-            }
-            else
-            {
-                Msg.mpParKFId = KFRANGE;
-                Msg.mpParKFClientId = MAPRANGE;
-                cout << "\033[1;33m!!! WARN !!!\033[0m " << __func__ << ":" << __LINE__ << " no Parent" << endl;
-            }
-
-            Msg.mbServerBA = false;
-
-            mbPoseChanged = false;
-
-            Msg.mbBad = mbBad;
-            Msg.mnId = static_cast<uint32_t>(mId.first);
-            Msg.mClientId = static_cast<uint8_t>(mId.second);
-            Msg.mUniqueId = mUniqueId;
-            Msg.mbMultiUse = mbMultiUse;
-            Msg.mbAck = mbAck;
-
-            msgMap.MPUpdates.push_back(Msg);
-        }
-    }
-}
-
-void MapPoint::ConvertToMessage(ccmslam_msgs::BMap &msgBMap, bkfptr pRefBKf, g2o::Sim3 mg2oS_wcurmap_wclientmap, bool bForceUpdateMsg)
-{
-    unique_lock<mutex> lockOut(mMutexOut);
-
-    if((mbSendFull || mSysState == eSystemState::SERVER) && !bForceUpdateMsg)
-    {
-        // ccmslam_msgs::MP Msg;
-
-        // unique_lock<mutex> lockFeat(mMutexFeatures,defer_lock);
-        // unique_lock<mutex> lockPos(mMutexPos,defer_lock);
-
-        // lock(lockFeat,lockPos);
-
-        // Msg.mpPredKFId = static_cast<uint16_t>(pRefKf->mId.first);
-        // Msg.mpPredKFClientId = static_cast<uint8_t>(pRefKf->mId.second);
-
-        // if(mSysState == eSystemState::SERVER)
-        // {
-        //     cv::Mat Tpw = pRefKf->GetPose();
-        //     cv::Mat Rpw = Tpw.rowRange(0,3).colRange(0,3);
-        //     cv::Mat tpw = Tpw.rowRange(0,3).col(3);
-
-        //     cv::Mat P3D_p = Rpw * mWorldPos + tpw;
-
-        //     float s = static_cast<double>(mg2oS_wcurmap_wclientmap.inverse().scale());
-        //     s = 1/s;
-
-        //     P3D_p *=(1./s);
-
-        //     Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::MP::_mPosPred_type,float>(P3D_p,Msg.mPosPred);
-
-        //     Msg.mpParKFId = KFRANGE;
-        //     Msg.mpParKFClientId = MAPRANGE;
-
-        //     Msg.bSentOnce = mbSentOnce;
-
-        //     ccptr pCC = mpMap->GetCCPtr(mId.second);
-        //     if(pCC->mbOptimized)
-        //         Msg.mbPoseChanged = true;
-        //     else
-        //         Msg.mbPoseChanged = mbPoseChanged;
-
-        //     Msg.mbServerBA = false;
-        // }
-        // else
-        // {
-        //     cv::Mat Rcw = pRefKf->GetPose().rowRange(0,3).colRange(0,3);
-        //     cv::Mat tcw = pRefKf->GetPose().rowRange(0,3).col(3);
-
-        //     cv::Mat RefPos = Rcw * mWorldPos + tcw;
-
-        //     Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::MP::_mPosPred_type,float>(RefPos,Msg.mPosPred);
-
-        //     if(mpRefKF)
-        //     {
-        //         Msg.mpParKFId = static_cast<uint16_t>(mpRefKF->mId.first);
-        //         Msg.mpParKFClientId = static_cast<uint8_t>(mpRefKF->mId.second);
-
-        //         cv::Mat Rparcw = mpRefKF->GetPose().rowRange(0,3).colRange(0,3);
-        //         cv::Mat tparcw = mpRefKF->GetPose().rowRange(0,3).col(3);
-
-        //         cv::Mat ParPos = Rparcw * mWorldPos + tparcw;
-
-        //         Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::MP::_mPosPar_type,float>(ParPos,Msg.mPosPar);
-        //     }
-        //     else
-        //     {
-        //         Msg.mpParKFId = KFRANGE;
-        //         Msg.mpParKFClientId = MAPRANGE;
-        //         cout << "\033[1;33m!!! WARN !!!\033[0m " << __func__ << ":" << __LINE__ << " no Parent" << endl;
-        //     }
-
-        //     Msg.mbAck = mbAck;
-
-        //     Msg.bSentOnce = mbSentOnce;
-        //     mbSentOnce = true;
-        //     mbPoseChanged = false;
-        //     mbSendFull = false;
-
-        //     Msg.mbServerBA = false;
-        // }
-
-        // //Normal Vector
-
-        // Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::MP::_mNormalVector_type,float>(mNormalVector,Msg.mNormalVector);
-
-        // //Descriptor
-
-        // Converter::CvMatToMsgArrayFixedSize<ccmslam_msgs::MP::_mDescriptor_type,uint8_t>(mDescriptor,Msg.mDescriptor);
-
-        // //Observation
-
-        // for(std::map<kfptr,size_t>::const_iterator mit=mObservations.begin();mit!=mObservations.end();++mit)
-        // {
-        //     if(!mit->first->isBad())
-        //     {
-        //         Msg.mObservations_KFIDs.push_back(static_cast<uint16_t>(mit->first->mId.first));
-        //         Msg.mObservations_KFClientIDs.push_back(static_cast<uint8_t>(mit->first->mId.second));
-        //         Msg.mObservations_n.push_back(static_cast<uint16_t>(mit->second));
-        //     }
-        // }
-
-        // Msg.mfMinDistance = mfMinDistance;
-        // Msg.mfMaxDistance = mfMaxDistance;
-
-        // Msg.mbBad = mbBad;
-        // Msg.mnId = static_cast<uint32_t>(mId.first);
-        // Msg.mClientId = static_cast<uint8_t>(mId.second);
-        // Msg.mUniqueId = mUniqueId;
-
-        // Msg.mnFirstKFid = static_cast<uint16_t>(mFirstKfId.first);
-        // Msg.mnFirstKfClientId = static_cast<uint8_t>(mFirstKfId.second);
-
-        // Msg.mbMultiUse = mbMultiUse;
-
-        // msgMap.MapPoints.push_back(Msg);
+        msgBMap.MapPoints.push_back(Msg);
     }
     else
     {
@@ -2078,17 +2078,17 @@ void MapPoint::WriteMembersFromMessage(ccmslam_msgs::MP *pMsg, g2o::Sim3 mg2oS_w
             return;
         }
     }
-    // else if(mSysState == eSystemState::SERVER)
-    // {
-    //     bool bSetPos = this->SetPoseFromMessage(pMsg,mg2oS_wcurmap_wclientmap);
+    else if(mSysState == eSystemState::SERVER)
+    {
+        bool bSetPos = this->SetPoseFromMessage(pMsg,mg2oS_wcurmap_wclientmap);
 
-    //     if(!bSetPos)
-    //     {
-    //         mObservations.clear();
-    //         mbBad = true;
-    //         return;
-    //     }
-    // }
+        if(!bSetPos)
+        {
+            mObservations.clear();
+            mbBad = true;
+            return;
+        }
+    }
 }
 
 bool MapPoint::SetPoseFromMessage(ccmslam_msgs::MP *pMsg, g2o::Sim3 mg2oS_wcurmap_wclientmap)
@@ -2130,106 +2130,106 @@ bool MapPoint::SetPoseFromMessage(ccmslam_msgs::MPred *pMsg, g2o::Sim3 mg2oS_wcu
             return false;
         }
     }
-    // else if(mSysState == eSystemState::SERVER)
-    // {
-    //     cv::Mat P3D_ref = cv::Mat(3,1,5); //in world client
+    else if(mSysState == eSystemState::SERVER)
+    {
+        cv::Mat P3D_ref = cv::Mat(3,1,5); //in world client
 
-    //     kfptr pRef = mpMap->GetKfPtr(pMsg->mpPredKFId,pMsg->mpPredKFClientId);
+        bkfptr pRef = mpBMap->GetBKfsPtr(pMsg->mpPredBKFId,pMsg->mpPredBKFClientId);
 
-    //     if(pRef)
-    //     {
-    //         Converter::MsgArrayFixedSizeToCvMat<ccmslam_msgs::MP::_mPosPred_type,float>(P3D_ref,pMsg->mPosPred);
-    //     }
+        if(pRef)
+        {
+            Converter::MsgArrayFixedSizeToCvMat<ccmslam_msgs::MP::_mPosPred_type,float>(P3D_ref,pMsg->mPosPred);
+        }
 
-    //     if(!pRef)
-    //     {
-    //         pRef = mpMap->GetKfPtr(pMsg->mpParKFId,pMsg->mpParKFClientId);
+        if(!pRef)
+        {
+            pRef = mpBMap->GetBKfsPtr(pMsg->mpParBKFId,pMsg->mpParBKFClientId);
 
-    //         if(pRef)
-    //         {
-    //             Converter::MsgArrayFixedSizeToCvMat<ccmslam_msgs::MP::_mPosPar_type,float>(P3D_ref,pMsg->mPosPar);
-    //         }
-    //     }
+            if(pRef)
+            {
+                Converter::MsgArrayFixedSizeToCvMat<ccmslam_msgs::MP::_mPosPar_type,float>(P3D_ref,pMsg->mPosPar);
+            }
+        }
 
-    //     if(!pRef)
-    //     {
-    //         pRef = mpMap->GetErasedKfPtr(pMsg->mpPredKFId,pMsg->mpPredKFClientId);
+        if(!pRef)
+        {
+            pRef = mpBMap->GetErasedBKfsPtr(pMsg->mpPredBKFId,pMsg->mpPredBKFClientId);
 
-    //         if(pRef)
-    //         {
-    //             Converter::MsgArrayFixedSizeToCvMat<ccmslam_msgs::MP::_mPosPred_type,float>(P3D_ref,pMsg->mPosPred);
-    //         }
-    //     }
+            if(pRef)
+            {
+                Converter::MsgArrayFixedSizeToCvMat<ccmslam_msgs::MP::_mPosPred_type,float>(P3D_ref,pMsg->mPosPred);
+            }
+        }
 
-    //     if(!pRef)
-    //     {
-    //         pRef = mpMap->GetErasedKfPtr(pMsg->mpParKFId,pMsg->mpParKFClientId);
+        if(!pRef)
+        {
+            pRef = mpBMap->GetErasedBKfsPtr(pMsg->mpParBKFId,pMsg->mpParBKFClientId);
 
-    //         if(pRef)
-    //         {
-    //             Converter::MsgArrayFixedSizeToCvMat<ccmslam_msgs::MP::_mPosPar_type,float>(P3D_ref,pMsg->mPosPar);
-    //         }
-    //     }
+            if(pRef)
+            {
+                Converter::MsgArrayFixedSizeToCvMat<ccmslam_msgs::MP::_mPosPar_type,float>(P3D_ref,pMsg->mPosPar);
+            }
+        }
 
-    //     if(!pRef)
-    //     {
-    //         //so there is really no pointer available -- we have to ignore this message
-    //         return false;
-    //     }
+        if(!pRef)
+        {
+            //so there is really no pointer available -- we have to ignore this message
+            return false;
+        }
 
-    //     float s = static_cast<double>(mg2oS_wcurmap_wclientmap.scale());
-    //     s = 1/s;
+        float s = static_cast<double>(mg2oS_wcurmap_wclientmap.scale());
+        s = 1/s;
 
-    //     P3D_ref *=(1./s);
+        P3D_ref *=(1./s);
 
-    //     if(!pRef->isBad())
-    //     {
-    //         cv::Mat Twp =  pRef->GetPoseInverse();
+        if(!pRef->isBad())
+        {
+            cv::Mat Twp =  pRef->GetPoseInverse();
 
-    //         cv::Mat Rwp = Twp.rowRange(0,3).colRange(0,3);
-    //         cv::Mat twp = Twp.rowRange(0,3).col(3);
+            cv::Mat Rwp = Twp.rowRange(0,3).colRange(0,3);
+            cv::Mat twp = Twp.rowRange(0,3).col(3);
 
-    //         cv::Mat P3D_w = Rwp * P3D_ref + twp;
-    //         P3D_w.copyTo(mWorldPos);
-    //     }
-    //     else
-    //     {
-    //         kfptr pRefRef = pRef->GetParent();
+            cv::Mat P3D_w = Rwp * P3D_ref + twp;
+            P3D_w.copyTo(mWorldPos);
+        }
+        else
+        {
+            bkfptr pRefRef = pRef->GetParent();
 
-    //         if(!pRefRef)
-    //         {
-    //             cout << "\033[1;31m!!!!! ERROR !!!!!\033[0m " << __func__ << ":"  << __LINE__ << " parent is bad or not existing" << endl;
-    //             cout << "this: " << this->mId.first << "|" << this->mId.second << endl;
-    //             cout << "pPred: " << pRef->mId.first << "|" << pRef->mId.second << endl;
-    //             cout << "!pPredPred" << endl;
-    //             throw infrastructure_ex();
-    //         }
+            if(!pRefRef)
+            {
+                cout << "\033[1;31m!!!!! ERROR !!!!!\033[0m " << __func__ << ":"  << __LINE__ << " parent is bad or not existing" << endl;
+                cout << "this: " << this->mId.first << "|" << this->mId.second << endl;
+                cout << "pPred: " << pRef->mId.first << "|" << pRef->mId.second << endl;
+                cout << "!pPredPred" << endl;
+                throw infrastructure_ex();
+            }
 
-    //         cv::Mat T_p_pp = pRef->mTcp;
+            cv::Mat T_p_pp = pRef->mTcp;
 
-    //         while(pRefRef->isBad())
-    //         {
-    //             T_p_pp = T_p_pp * pRefRef->mTcp;
-    //             {
-    //                 cout << "\033[1;31m!!!!! ERROR !!!!!\033[0m " << __func__ << ":"  << __LINE__ << " parent is bad or not existing" << endl;
-    //                 cout << "this: " << this->mId.first << "|" << this->mId.second << endl;
-    //                 cout << "pPred: " << pRef->mId.first << "|" << pRef->mId.second << endl;
-    //                 cout << "!pPredPred" << endl;
-    //                 throw infrastructure_ex();
-    //             }
-    //         }
+            while(pRefRef->isBad())
+            {
+                T_p_pp = T_p_pp * pRefRef->mTcp;
+                {
+                    cout << "\033[1;31m!!!!! ERROR !!!!!\033[0m " << __func__ << ":"  << __LINE__ << " parent is bad or not existing" << endl;
+                    cout << "this: " << this->mId.first << "|" << this->mId.second << endl;
+                    cout << "pPred: " << pRef->mId.first << "|" << pRef->mId.second << endl;
+                    cout << "!pPredPred" << endl;
+                    throw infrastructure_ex();
+                }
+            }
 
-    //         cv::Mat T_pp_w = pRefRef->GetPose();
-    //         cv::Mat Tpw = T_p_pp * T_pp_w;
-    //         cv::Mat Twp = Tpw.inv();
+            cv::Mat T_pp_w = pRefRef->GetPose();
+            cv::Mat Tpw = T_p_pp * T_pp_w;
+            cv::Mat Twp = Tpw.inv();
 
-    //         cv::Mat Rwp = Twp.rowRange(0,3).colRange(0,3);
-    //         cv::Mat twp = Twp.rowRange(0,3).col(3);
+            cv::Mat Rwp = Twp.rowRange(0,3).colRange(0,3);
+            cv::Mat twp = Twp.rowRange(0,3).col(3);
 
-    //         cv::Mat P3D_w = Rwp * P3D_ref + twp;
-    //         P3D_w.copyTo(mWorldPos);
-    //     }
-    // }
+            cv::Mat P3D_w = Rwp * P3D_ref + twp;
+            P3D_w.copyTo(mWorldPos);
+        }
+    }
 
     return true;
 }

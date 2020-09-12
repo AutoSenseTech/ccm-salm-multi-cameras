@@ -98,7 +98,7 @@ public:
 
     //---communication---
     void ReduceMessage(ccmslam_msgs::MP *pMsgFull, ccmslam_msgs::MPred *pMsgRed);
-    void ConvertToMessage(ccmslam_msgs::Map &msgMap, kfptr pRefKf, g2o::Sim3 mg2oS_wcurmap_wclientmap = g2o::Sim3(), bool bForceUpdateMsg = false);
+    //void ConvertToMessage(ccmslam_msgs::Map &msgMap, kfptr pRefKf, g2o::Sim3 mg2oS_wcurmap_wclientmap = g2o::Sim3(), bool bForceUpdateMsg = false);
     void ConvertToMessage(ccmslam_msgs::BMap &msgBMap, bkfptr pRefBKf, g2o::Sim3 mg2oS_wcurmap_wclientmap = g2o::Sim3(), bool bForceUpdateMsg = false);
     void UpdateFromMessage(ccmslam_msgs::MP *pMsg, g2o::Sim3 mg2oS_wcurmap_wclientmap = g2o::Sim3());
     void UpdateFromMessage(ccmslam_msgs::MPred *pMsg, g2o::Sim3 mg2oS_wcurmap_wclientmap = g2o::Sim3());

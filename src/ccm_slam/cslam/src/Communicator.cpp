@@ -87,7 +87,7 @@ Communicator::Communicator(ccptr pCC, vocptr pVoc, bmapptr pBMap, bdbptr pBKFDB)
         ss = new stringstream;
         *ss << "BMapOut" << SysType << mClientId;
         PubMapTopicName = ss->str();
-        //mPubBMap = mNh.advertise<ccmslam_msgs::BMap>(PubMapTopicName,params::comm::server::miPubMapBufferSize);
+        mPubBMap = mNh.advertise<ccmslam_msgs::BMap>(PubMapTopicName,params::comm::server::miPubMapBufferSize);
 		//Publisher
         //server发布关键物体位置信息
         //mPubSke = mNh.advertise<ccmslam_msgs::ObjectPosition>("ObjectPositionTopicName",10);//todo
@@ -256,7 +256,7 @@ void Communicator::RunServer()
         mpCC->mpLogger->SetComm(__LINE__,mClientId);
         #endif
 
-        while(!mpMap->LockMapUpdate()){usleep(params::timings::miLockSleep);}
+        while(!mpBMap->LockBMapUpdate()){usleep(params::timings::miLockSleep);}
 
         #ifdef LOGGING
         mpCC->mpLogger->SetComm(__LINE__,mClientId);
@@ -268,9 +268,9 @@ void Communicator::RunServer()
         {
             unique_lock<mutex> lock(mMutexBuffersIn);
 
-            if(!mlBufKFin.empty())
+            if(!mlBufBKFsin.empty())
             {
-                this->ProcessKfInServer();
+                this->ProcessBKfsInServer();
             }
 
             if(!mlBufMPin.empty())
@@ -293,7 +293,7 @@ void Communicator::RunServer()
         #endif
 
         mpCC->UnLockComm();
-        mpMap->UnLockMapUpdate();
+        mpBMap->UnLockBMapUpdate();
 
         #ifdef LOGGING
         mpCC->mpLogger->SetComm(__LINE__,mClientId);
@@ -726,63 +726,63 @@ void Communicator::PublishMapServer()
     if(dTimeDiff < mdPeriodicTime)
         return;
 
-    ccmslam_msgs::Map msgMap;
+    ccmslam_msgs::BMap msgBMap;
 
     mdLastTimePub = ros::Time::now().toSec();
 
-    //KF Acks
-    for(set<size_t>::iterator sit = msAcksKF.begin();sit != msAcksKF.end();)
+    //BKF Acks
+    for(set<size_t>::iterator sit = msAcksBKF.begin();sit != msAcksBKF.end();)
     {
         size_t id = *sit;
-        msgMap.vAckKFs.push_back((uint16_t)id);
-        sit = msAcksKF.erase(sit);
+        msgBMap.vAckBKFs.push_back((uint16_t)id);
+        sit = msAcksBKF.erase(sit);
     }
 
     //MP Acks
     for(set<size_t>::iterator sit = msAcksMP.begin();sit != msAcksMP.end();)
     {
         size_t id = *sit;
-        msgMap.vAckMPs.push_back((uint32_t)id);
+        msgBMap.vAckMPs.push_back((uint32_t)id);
         sit = msAcksMP.erase(sit);
     }
 
     //Weak Acks
-    msgMap.WeakAckKF = (uint16_t)mnWeakAckKF;
-    mnWeakAckKF = KFRANGE;
+    msgBMap.WeakAckBKF = (uint16_t)mnWeakAckBKFs;
+    mnWeakAckBKFs = KFRANGE;
 
-    msgMap.WeakAckMP = (uint32_t)mnWeakAckMP;
+    msgBMap.WeakAckMP = (uint32_t)mnWeakAckMP;
     mnWeakAckMP = MPRANGE;
 
     //fill with vicitity information
-    if(mpMap->KeyFramesInMap() > 10) //start after 10 KFs
+    if(mpBMap->BundledKeyFramesInMap() > 10) //start after 10 KFs
     {
-        unique_lock<mutex> lock(mMutexNearestKf);
+        unique_lock<mutex> lock(mMutexNearestBKf);
 
-        if(!mpNearestKF)
+        if(!mpNearestBKFs)
         {
             //start a new attempt to get the pointer
-            kfptr pKF = mpMap->GetKfPtr(mNearestKfId);
-            if(pKF)
-                mpNearestKF = pKF;
+            bkfptr pBKF = mpBMap->GetBKfsPtr(mNearestBKfsId);
+            if(pBKF)
+                mpNearestBKFs = pBKF;
         }
 
-        if(mpNearestKF && mNearestKfId.first != KFRANGE)
+        if(mpNearestBKFs && mNearestBKfsId.first != KFRANGE)
         {
-            if(mpNearestKF->mId != mNearestKfId)
+            if(mpNearestBKFs->mId != mNearestBKfsId)
             {
                 //try again to get ptr
-                kfptr pKF = mpMap->GetKfPtr(mNearestKfId);
-                if(pKF)
-                    mpNearestKF = pKF;
+                bkfptr pBKF = mpBMap->GetBKfsPtr(mNearestBKfsId);
+                if(pBKF)
+                    mpNearestBKFs = pBKF;
                 else
                 {
                     //try the closest ones -- maybe this can be found
                     for(size_t itclose = 1; itclose < 1+SERVERCURKFSEARCHITS; ++itclose)
                     {
-                        pKF = mpMap->GetKfPtr(mNearestKfId.first - itclose,mNearestKfId.second);
-                        if(pKF)
+                        pBKF = mpBMap->GetBKfsPtr(mNearestBKfsId.first - itclose,mNearestBKfsId.second);
+                        if(pBKF)
                         {
-                            mpNearestKF = pKF;
+                            mpNearestBKFs = pBKF;
                             break;
                         }
                     }
@@ -790,26 +790,26 @@ void Communicator::PublishMapServer()
             }
 
             //if we cannot find the current nearest KF, we use the last valid one
-            mpMap->PackVicinityToMsg(mpNearestKF,msgMap,mpCC);
+            mpBMap->PackVicinityToMsg(mpNearestBKFs,msgBMap,mpCC);
         }
     }
 
     //publish (if not empty)
 
-    if(!msgMap.vAckKFs.empty() || !msgMap.vAckMPs.empty() || !msgMap.Keyframes.empty() || !msgMap.MapPoints.empty() || !(msgMap.WeakAckKF == KFRANGE) || !(msgMap.WeakAckMP == MPRANGE))
+    if(!msgBMap.vAckBKFs.empty() || !msgBMap.vAckMPs.empty() || !msgBMap.BundledKeyframes.empty() || !msgBMap.MapPoints.empty() || !(msgBMap.WeakAckBKF == KFRANGE) || !(msgBMap.WeakAckMP == MPRANGE))
     {
         ++mServerMapCount;
-        msgMap.mMsgId = mServerMapCount;
-        msgMap.header.stamp = ros::Time::now();
+        msgBMap.mMsgId = mServerMapCount;
+        msgBMap.header.stamp = ros::Time::now();
 
         if(params::comm::server::miKfLimitToClient == 0)
         {
-            msgMap.Keyframes.clear();
-            msgMap.MapPoints.clear();
-            msgMap.KFUpdates.clear();
-            msgMap.MPUpdates.clear();
+            msgBMap.BundledKeyframes.clear();
+            msgBMap.MapPoints.clear();
+            msgBMap.BKFUpdates.clear();
+            msgBMap.MPUpdates.clear();
         }
-        mPubMap.publish(msgMap);
+        mPubBMap.publish(msgBMap);
         // cout <<"Server 发送消息" <<msgMap.ClosestKf_Id<<endl;
     }
 }
@@ -936,7 +936,7 @@ void Communicator::ProcessBKfsInClient()
                 if(pMsg->mbPoseChanged)
                 {
 
-                    pBKFs->UpdateFromMessage(pMsg);  //todo client部分很短
+                    pBKFs->UpdateFromMessage(pMsg);  
 
                     pBKFs->UpdateConnections();
                 }
@@ -1115,6 +1115,120 @@ void Communicator::ProcessKfInServer()
     }
 }
 
+void Communicator::ProcessBKfsInServer()
+{
+    int ItCount = 0;
+
+    while (!mlBufBKFsin.empty() && (ItCount < mBKfsItBound))
+    {
+        msgBKFPair msgpair = mlBufBKFsin.front();
+        mlBufBKFsin.pop_front();
+
+        if(msgpair.first.mClientId != MAPRANGE)  //new
+        {
+            ccmslam_msgs::BKF* pMsg = new ccmslam_msgs::BKF();
+
+            *pMsg = msgpair.first;
+            {
+                //这一帧在server的地图里面已经有了 update的bkf
+                bkfptr pBKF = mpBMap->GetBKfsPtr(pMsg->mnId,pMsg->mClientId);
+                if(pBKF)
+                {
+                    //Note: this can happen, if the Ack from server to client gets lost
+                    msAcksBKF.insert(pMsg->mnId);
+                    delete pMsg;
+                    continue;
+                }
+            }
+            if(mpBMap->IsBKfDeleted(pMsg->mnId,pMsg->mClientId))
+            {
+                //Note: this can happen, if the Ack from server to client gets lost
+                msAcksBKF.insert(pMsg->mnId);
+                delete pMsg;
+                continue;
+            }
+
+            bkfptr pBKF{new BundledKeyFrames(pMsg,mpVoc,mpBMap,mpBundledKeyFramesDatabase,shared_from_this(),mpCC->mSysState,mpCC->mpUID->GetId(),mpCC->mg2oS_wcurmap_wclientmap)};
+            pBKF->mdServerTimestamp = ros::Time::now().toNSec();
+
+            if(pBKF->isBad())
+            {
+                //could not be processed, but send weak ack
+                this->SetWeakAckBKF(pMsg->mnId);
+                delete pMsg;
+                continue;
+            }
+
+            pBKF->EstablishInitialConnectionsServer();
+            if(pBKF->isBad())
+            {
+                this->SetWeakAckBKF(pMsg->mnId);
+                delete pMsg;
+                continue;
+            }
+
+            pBKF->UpdateConnections();
+
+            mpBMap->AddBundledKeyFrames(pBKF);
+            mpMapping->InsertBundledKeyFrames(pBKF);
+            msAcksBKF.insert(pMsg->mnId);
+
+            if(pBKF->mId.first == 0)
+            {
+                mpBMap->mvpBundledKeyFramesOrigins.push_back(pBKF);
+            }
+
+            delete pMsg;
+        }
+        else if(msgpair.second.mClientId != MAPRANGE)  //update
+        {
+            ccmslam_msgs::BKFred* pMsg = new ccmslam_msgs::BKFred();
+
+            *pMsg = msgpair.second;
+
+            bkfptr pBKF = mpBMap->GetBKfsPtr(pMsg->mnId,pMsg->mClientId);
+
+            if(pBKF)
+            {
+                //everything ok
+            }
+            else
+            {
+                if(!mpBMap->IsBKfDeleted(pMsg->mnId,pMsg->mClientId))
+                {
+                    this->SetWeakAckBKF(pMsg->mnId);
+                }
+            }
+
+            if(!pBKF)
+            {
+                delete pMsg;
+                continue; //maybe it is deleted, maybe it got lost -- but it is not there
+            }
+
+            if(pBKF->isBad())
+            {
+                delete pMsg;
+                continue; //no need to process bad KFs
+            }
+
+            pBKF->UpdateFromMessage(pMsg,mpCC->mg2oS_wcurmap_wclientmap);
+            pBKF->UpdateConnections();
+
+            delete pMsg;
+        }
+
+        ++ItCount;
+
+        #ifndef HIDEBUFFERLIMITS
+        if(ItCount == mBKfsItBound)
+        {
+            cout << "\033[1;34m!!! NOTICE !!!\033[0m " << __func__ << ":" << __LINE__ << " -- Agent " << mpCC->mClientId << ": reached INPUT KF iteration limit" << "[" << mlBufBKFsin.size() << "]" << endl;
+        }
+        #endif
+    }
+}
+
 void Communicator::ProcessMpInClient()
 {
     int ItCount = 0;
@@ -1212,7 +1326,7 @@ void Communicator::ProcessMpInServer()
             *pMsg = msgpair.first;
 
             {
-                mpptr pMP = mpMap->GetMpPtr(pMsg->mnId,pMsg->mClientId);
+                mpptr pMP = mpBMap->GetMpPtr(pMsg->mnId,pMsg->mClientId);
                 if(pMP)
                 {
                     //Note: this can happen, if the Ack from server to client gets lost
@@ -1221,7 +1335,7 @@ void Communicator::ProcessMpInServer()
                     continue;
                 }
             }
-            if(mpMap->IsMpDeleted(pMsg->mnId,pMsg->mClientId))
+            if(mpBMap->IsMpDeleted(pMsg->mnId,pMsg->mClientId))
             {
                 //Note: this can happen, if the Ack from server to client gets lost
                 msAcksMP.insert(pMsg->mnId);
@@ -1229,7 +1343,7 @@ void Communicator::ProcessMpInServer()
                 continue;
             }
 
-            mpptr pMP{new MapPoint(pMsg,mpMap,shared_from_this(),mpCC->mSysState,mpCC->mpUID->GetId(),mpCC->mg2oS_wcurmap_wclientmap)};
+            mpptr pMP{new MapPoint(pMsg,mpBMap,shared_from_this(),mpCC->mSysState,mpCC->mpUID->GetId(),mpCC->mg2oS_wcurmap_wclientmap)};
 
             if(pMP->isBad())
             {
@@ -1248,18 +1362,18 @@ void Communicator::ProcessMpInServer()
                 continue;
             }
 
-            mpMap->AddMapPoint(pMP);
+            mpBMap->AddMapPoint(pMP);
             msAcksMP.insert(pMsg->mnId);
 
             delete pMsg;
         }
-        else if(msgpair.second.mClientId != MAPRANGE)
+        else if(msgpair.second.mClientId != MAPRANGE) //update
         {
             ccmslam_msgs::MPred* pMsg = new ccmslam_msgs::MPred();
 
             *pMsg = msgpair.second;
 
-            mpptr pMP = mpMap->GetMpPtr(pMsg->mnId,pMsg->mClientId);
+            mpptr pMP = mpBMap->GetMpPtr(pMsg->mnId,pMsg->mClientId);
 
             if(pMP)
             {
@@ -1267,7 +1381,7 @@ void Communicator::ProcessMpInServer()
             }
             else
             {
-                if(!mpMap->IsMpDeleted(pMsg->mnId,pMsg->mClientId))
+                if(!mpBMap->IsMpDeleted(pMsg->mnId,pMsg->mClientId))
                 {
                     this->SetWeakAckMP(pMsg->mnId);
                 }
@@ -1293,7 +1407,7 @@ void Communicator::ProcessMpInServer()
 
             pMP->UpdateFromMessage(pMsg,mpCC->mg2oS_wcurmap_wclientmap);
 
-            pMP->UpdateNormalAndDepth();
+            pMP->UpdateNormalAndDepthPlus();
 
             delete pMsg;
         }
@@ -1434,8 +1548,8 @@ void Communicator::ResetIfRequested()
         {
             this->ResetCommunicator();
             this->ResetMapping();
-            this->ResetDatabase();
-            this->ResetMap();
+            this->ResetBundledKeyframeDatabase();
+            this->ResetBMap();
         }
         else
         {
@@ -1450,20 +1564,20 @@ void Communicator::ResetCommunicator()
 {
     unique_lock<mutex> lockIn(mMutexBuffersIn);
     unique_lock<mutex> lockOut(mMutexBuffersOut);
-    unique_lock<mutex> lock5(mMutexNearestKf);
+    unique_lock<mutex> lock5(mMutexNearestBKf);
 
     usleep(10000); // wait to give msg buffers time to empty
 
-    mlBufKFin.clear();
+    mlBufBKFsin.clear();
     mlBufMPin.clear();
-    mspBufferKfOut.clear();
+    mspBufferBKfsOut.clear();
     mspBufferMpOut.clear();
 
-    msAcksKF.clear();
+    msAcksBKF.clear();
     msAcksMP.clear();
 
-    mpNearestKF = nullptr;
-    mNearestKfId = defpair;
+    mpNearestBKFs = nullptr;
+    mNearestBKfsId = defpair;
 }
 
 void Communicator::ResetDatabase()
@@ -1479,6 +1593,19 @@ void Communicator::ResetDatabase()
     mpDatabase->ResetMPs();
 }
 
+void Communicator::ResetBundledKeyframeDatabase()
+{
+    vector<bkfptr> vpBKFs = mpBMap->GetAllBundledKeyFrames();
+
+    for(vector<bkfptr>::iterator vit=vpBKFs.begin();vit!=vpBKFs.end();++vit)
+    {
+        bkfptr pBKF = *vit;
+        mpBundledKeyFramesDatabase->erase(pBKF);
+    }
+
+    mpBundledKeyFramesDatabase->ResetMPs();
+}
+
 void Communicator::ResetMapping()
 {
     mpMapping->RequestReset();
@@ -1489,12 +1616,25 @@ void Communicator::ResetMap()
     mpMap->clear();
 }
 
+void Communicator::ResetBMap()
+{
+    mpBMap->clear();
+}
+
 void Communicator::SetWeakAckKF(size_t id)
 {
     if(mnWeakAckKF == KFRANGE)
         mnWeakAckKF = id;
     else if(id > mnWeakAckKF)
         mnWeakAckKF = id;
+}
+
+void Communicator::SetWeakAckBKF(size_t id)
+{
+    if(mnWeakAckBKFs == KFRANGE)
+        mnWeakAckBKFs = id;
+    else if(id > mnWeakAckBKFs)
+        mnWeakAckBKFs = id;
 }
 
 void Communicator::SetWeakAckMP(size_t id)

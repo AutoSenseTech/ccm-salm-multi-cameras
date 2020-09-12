@@ -61,6 +61,7 @@ public:
     BundledKeyFrames(ccmslam_msgs::BKF* pMsg, vocptr pVoc, bmapptr pBMap, bdbptr pBKFDB, commptr pComm, eSystemState SysState,
                        size_t UniqueId = defid, g2o::Sim3 mg2oS_wcurmap_wclientmap = g2o::Sim3()); 
 
+    void EstablishInitialConnectionsServer();
     void EstablishInitialConnectionsClient();
 //---communication---
     void ReduceMessage(ccmslam_msgs::BKF *pMsgFull, ccmslam_msgs::BKFred *pMsgRed);
@@ -107,8 +108,9 @@ public:
     void ReplaceMapPointMatch(const size_t &index, mpptr pMP, bool bLock = false, bool bOverrideLock = false);
     std::set<mpptr> GetMapPoints();
     std::vector<mpptr> GetMapPointMatches();
-    mpptr GetMapPoint(const size_t &index);
     int TrackedMapPoints(const int &minObs);
+    mpptr GetMapPoint(const size_t &index);
+    bool IsMpLocked(const size_t &index);
     void RemapMapPointMatch(mpptr pMP, const size_t &index_now, const size_t &index_new);
 
 // Bag of Words Representation

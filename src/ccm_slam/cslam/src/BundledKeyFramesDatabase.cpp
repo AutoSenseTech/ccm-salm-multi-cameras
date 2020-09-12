@@ -172,5 +172,13 @@ vector<BundledKeyFramesDatabase::bkfptr> BundledKeyFramesDatabase::DetectMapMatc
     return vpLoopCandidates;
 }
 
+void BundledKeyFramesDatabase::ResetMPs()
+{
+    unique_lock<mutex> lock(mMutexMPs);
+
+    mmbDirectBad.clear();
+    mmpMPs.clear();
+}
+
 
 }

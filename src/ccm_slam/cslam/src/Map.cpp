@@ -802,94 +802,94 @@ void Map::MapTrimming(kfptr pKFcur)
 
 void Map::PackVicinityToMsg(kfptr pKFcur, ccmslam_msgs::Map &msgMap, ccptr pCC)
 {
-    if(pKFcur->mId.first == 0)
-        return; //we do not send the origin KFs
-    //max == -1 means there is no upper limit
-    int max = params::comm::server::miKfLimitToClient;
+    // if(pKFcur->mId.first == 0)
+    //     return; //we do not send the origin KFs
+    // //max == -1 means there is no upper limit
+    // int max = params::comm::server::miKfLimitToClient;
 
-    unique_lock<mutex> lock(mMutexMap);
-    unique_lock<mutex> lock2(mMutexErased);
+    // unique_lock<mutex> lock(mMutexMap);
+    // unique_lock<mutex> lock2(mMutexErased);
 
-    set<kfptr> sKfVicinity;
-    set<mpptr> sMpVicinity;
-    sKfVicinity.insert(pKFcur);
-    set<kfptr> spKFsAddedLastIteration;
-    spKFsAddedLastIteration.insert(pKFcur);
+    // set<kfptr> sKfVicinity;
+    // set<mpptr> sMpVicinity;
+    // sKfVicinity.insert(pKFcur);
+    // set<kfptr> spKFsAddedLastIteration;
+    // spKFsAddedLastIteration.insert(pKFcur);
 
-    pKFcur->UpdateConnections(true);
+    // pKFcur->UpdateConnections(true);
 
-    //add KFs from CovGraph
-    int depth = max;
-    for(int it = 1;it<=depth;++it)
-    {
-        set<kfptr> spAdd; //do not insert into sKfVicinity while iterating it
+    // //add KFs from CovGraph
+    // int depth = max;
+    // for(int it = 1;it<=depth;++it)
+    // {
+    //     set<kfptr> spAdd; //do not insert into sKfVicinity while iterating it
 
-        for(set<kfptr>::iterator sit = spKFsAddedLastIteration.begin();sit!=spKFsAddedLastIteration.end();++sit)
-        {
-            kfptr pKFi = *sit;
-            if(pKFi->mId.first == 0) continue; //we do not send the origin KFs
+    //     for(set<kfptr>::iterator sit = spKFsAddedLastIteration.begin();sit!=spKFsAddedLastIteration.end();++sit)
+    //     {
+    //         kfptr pKFi = *sit;
+    //         if(pKFi->mId.first == 0) continue; //we do not send the origin KFs
 
-            vector<KeyFrame::kfptr> vCovKfs = pKFi->GetVectorCovisibleKeyFrames();
+    //         vector<KeyFrame::kfptr> vCovKfs = pKFi->GetVectorCovisibleKeyFrames();
 
-            for(vector<kfptr>::iterator vit = vCovKfs.begin();vit!=vCovKfs.end();++vit)
-            {
-                kfptr pKFj = *vit;
-                if(!pKFj || pKFj->isBad()) continue;
-                if(pKFj->mId.first == 0) continue; //we do not send the origin KFs
-                spAdd.insert(pKFj);
+    //         for(vector<kfptr>::iterator vit = vCovKfs.begin();vit!=vCovKfs.end();++vit)
+    //         {
+    //             kfptr pKFj = *vit;
+    //             if(!pKFj || pKFj->isBad()) continue;
+    //             if(pKFj->mId.first == 0) continue; //we do not send the origin KFs
+    //             spAdd.insert(pKFj);
 
-                if((max != -1) && (sKfVicinity.size() + spAdd.size()) >= max)
-                {
-                    break;
-                }
-            }
+    //             if((max != -1) && (sKfVicinity.size() + spAdd.size()) >= max)
+    //             {
+    //                 break;
+    //             }
+    //         }
 
-            if((max != -1) && (sKfVicinity.size() + spAdd.size()) >= max)
-                break;
-        }
+    //         if((max != -1) && (sKfVicinity.size() + spAdd.size()) >= max)
+    //             break;
+    //     }
 
-        sKfVicinity.insert(spKFsAddedLastIteration.begin(),spKFsAddedLastIteration.end());
-        spKFsAddedLastIteration = spAdd;
+    //     sKfVicinity.insert(spKFsAddedLastIteration.begin(),spKFsAddedLastIteration.end());
+    //     spKFsAddedLastIteration = spAdd;
 
-        if((max != -1) && (sKfVicinity.size() >= max))
-            break;
+    //     if((max != -1) && (sKfVicinity.size() >= max))
+    //         break;
 
-        if(spKFsAddedLastIteration.empty())
-            break;
-    }
+    //     if(spKFsAddedLastIteration.empty())
+    //         break;
+    // }
 
-    //add MPs included by the KFs
-    for(set<kfptr>::iterator sit = sKfVicinity.begin();sit!=sKfVicinity.end();++sit)
-    {
-        kfptr pKFi = *sit;
-        vector<mpptr> vMPs = pKFi->GetMapPointMatches();
+    // //add MPs included by the KFs
+    // for(set<kfptr>::iterator sit = sKfVicinity.begin();sit!=sKfVicinity.end();++sit)
+    // {
+    //     kfptr pKFi = *sit;
+    //     vector<mpptr> vMPs = pKFi->GetMapPointMatches();
 
-        for(vector<mpptr>::iterator vit = vMPs.begin();vit!=vMPs.end();++vit)
-        {
-            mpptr pMPi = *vit;
-            if(!pMPi || pMPi->isBad()) continue;
+    //     for(vector<mpptr>::iterator vit = vMPs.begin();vit!=vMPs.end();++vit)
+    //     {
+    //         mpptr pMPi = *vit;
+    //         if(!pMPi || pMPi->isBad()) continue;
 
-            sMpVicinity.insert(pMPi);
-        }
-    }
+    //         sMpVicinity.insert(pMPi);
+    //     }
+    // }
 
-    pKFcur->ConvertToMessage(msgMap,pCC->mg2oS_wcurmap_wclientmap,pKFcur); //make sure this is first KF in vector
+    // pKFcur->ConvertToMessage(msgMap,pCC->mg2oS_wcurmap_wclientmap,pKFcur); //make sure this is first KF in vector
 
-    for(set<kfptr>::iterator sit = sKfVicinity.begin();sit!=sKfVicinity.end();++sit)
-    {
-        kfptr pKFi = *sit;
+    // for(set<kfptr>::iterator sit = sKfVicinity.begin();sit!=sKfVicinity.end();++sit)
+    // {
+    //     kfptr pKFi = *sit;
 
-        if(pKFi->mId == pKFcur->mId)
-            continue; //do not enter twice
+    //     if(pKFi->mId == pKFcur->mId)
+    //         continue; //do not enter twice
 
-        pKFi->ConvertToMessage(msgMap,pCC->mg2oS_wcurmap_wclientmap,pKFcur);
-    }
+    //     pKFi->ConvertToMessage(msgMap,pCC->mg2oS_wcurmap_wclientmap,pKFcur);
+    // }
 
-    for(set<mpptr>::iterator sit = sMpVicinity.begin();sit != sMpVicinity.end();++sit)
-    {
-        mpptr pMPi = *sit;
-        pMPi->ConvertToMessage(msgMap,pKFcur,pCC->mg2oS_wcurmap_wclientmap);
-    }
+    // for(set<mpptr>::iterator sit = sMpVicinity.begin();sit != sMpVicinity.end();++sit)
+    // {
+    //     mpptr pMPi = *sit;
+    //     pMPi->ConvertToMessage(msgMap,pKFcur,pCC->mg2oS_wcurmap_wclientmap);
+    // }
 }
 
 void Map::HandleMissingParent(size_t QueryId, size_t QueryCId, Mat &T_cref_cquery, kfptr pRefKf = nullptr)
