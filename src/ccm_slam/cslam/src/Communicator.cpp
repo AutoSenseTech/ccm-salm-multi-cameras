@@ -262,15 +262,17 @@ void Communicator::RunServer()
         mpCC->mpLogger->SetComm(__LINE__,mClientId);
         #endif
         this->PublishMapServer();
-		
+        //cout<<"(RunServer) publish succ"<<endl;
 		//this->PublishObjectPositionServer();
 
         {
             unique_lock<mutex> lock(mMutexBuffersIn);
-
+           // cout<<"(RunServer) succ"<<endl;
             if(!mlBufBKFsin.empty())
             {
+                //cout<<"(RunServer) ProcessBKfsInServer enter"<<endl;
                 this->ProcessBKfsInServer();
+                //cout<<"(RunServer) ProcessBKfsInServer succ"<<endl;
             }
 
             if(!mlBufMPin.empty())
@@ -280,7 +282,7 @@ void Communicator::RunServer()
                 #endif
                 //cout <<"Comm server处理MP消息 ProcessMpInServer" <<endl;
                 this->ProcessMpInServer();
-               //cout <<"Comm server处理MP消息结束 " <<endl;
+                //cout <<"Comm server处理MP消息结束 " <<endl;
 
                 #ifdef TRACELOCK
                 mpCC->mpLogger->SetComm(__LINE__,mClientId);
@@ -291,23 +293,26 @@ void Communicator::RunServer()
         #ifdef TRACELOCK
         mpCC->mpLogger->SetComm(__LINE__,mClientId);
         #endif
-
+      
         mpCC->UnLockComm();
+         
         mpBMap->UnLockBMapUpdate();
+       
 
         #ifdef LOGGING
         mpCC->mpLogger->SetComm(__LINE__,mClientId);
         #endif
-
+  
         ResetIfRequested();
-
+    
         usleep(params::timings::server::miCommRate);
+ 
     }
 }
 
 void Communicator::MapCbClient(ccmslam_msgs::BMapConstPtr pMsg)
 {
-    //cout << "线程1:进入MapCbClient" <<endl;
+    cout << "线程1:进入MapCbClient" <<endl;
     for(int it = 0; it < pMsg->vAckBKFs.size() ; ++it)
     {
         if(mlBKfsOpenAcks.empty())
@@ -477,10 +482,10 @@ void Communicator::MapCbServer(ccmslam_msgs::BMapConstPtr pMsg)
                 mlBufBKFsin.push_back(make_pair(msgFull,msgRed));
             }
         }
-
+       // cout << "MapCbServer 1" << endl;
         if(pMsg->BundledKeyframes.size() > 0)
         {
-            //cout << "+++++ server 添加KF　+++++" << endl;
+            //cout << "+++++ server 添加BKF　+++++" << endl;
             for(int idx=0;idx<pMsg->BundledKeyframes.size();++idx)
             {
                 ccmslam_msgs::BKF msgFull = pMsg->BundledKeyframes[idx];
@@ -489,7 +494,7 @@ void Communicator::MapCbServer(ccmslam_msgs::BMapConstPtr pMsg)
                 mlBufBKFsin.push_back(make_pair(msgFull,msgRed));
             }
         }
-
+        //cout << "MapCbServer 2" << endl;
         if(pMsg->MPUpdates.size() > 0)
         {
             //cout << "+++++ server 更新MP　+++++" << endl;
@@ -501,19 +506,25 @@ void Communicator::MapCbServer(ccmslam_msgs::BMapConstPtr pMsg)
                 mlBufMPin.push_back(make_pair(msgFull,msgRed));
             }
         }
-
+        //cout << "MapCbServer 3" << endl;
         if(pMsg->MapPoints.size() > 0)
         {
+            //cout << "MapCbServer 3.1" << endl;
             for(int idx=0;idx<pMsg->MapPoints.size();++idx)
             {
+                //cout << "MapCbServer 3.2" << endl;
                 ccmslam_msgs::MP msgFull = pMsg->MapPoints[idx];
+                //cout << "MapCbServer 3.3" << endl;
                 ccmslam_msgs::MPred msgRed;
+                //cout << "MapCbServer 3.4" << endl;
                 msgRed.mClientId = MAPRANGE;
+                //cout << "MapCbServer 3.5" << endl;
                 mlBufMPin.push_back(make_pair(msgFull,msgRed));
+                //cout << "MapCbServer 3.6" << endl;
             }
         }
     }
-
+   
     {
         unique_lock<mutex> lock(mMutexNearestBKf);
 
@@ -532,6 +543,7 @@ void Communicator::MapCbServer(ccmslam_msgs::BMapConstPtr pMsg)
         if(mpBMap->isRunningGBA())
         {
             mpBMap->StopGBA();
+          
         }
 
         mnEmptyMsgs = 0;
@@ -541,7 +553,7 @@ void Communicator::MapCbServer(ccmslam_msgs::BMapConstPtr pMsg)
         if(mpBMap->GetMaxBKFid() > 10)
         {
             //make sure map was initialized
-
+          
             ++mnEmptyMsgs;
 
             const size_t nThresFinished = (size_t)(5.0 * params::comm::client::mfPubFreq);
@@ -716,7 +728,7 @@ void Communicator::PublishMapClient()
         msgBMap.header.stamp = ros::Time::now();
         
         mPubBMap.publish(msgBMap);
-        // cout << "Client 发送消息　"<<endl;
+        cout << "===========================Client 发送消息"<<endl;
     }
 }
 
@@ -1147,8 +1159,9 @@ void Communicator::ProcessBKfsInServer()
                 delete pMsg;
                 continue;
             }
-
+          
             bkfptr pBKF{new BundledKeyFrames(pMsg,mpVoc,mpBMap,mpBundledKeyFramesDatabase,shared_from_this(),mpCC->mSysState,mpCC->mpUID->GetId(),mpCC->mg2oS_wcurmap_wclientmap)};
+            
             pBKF->mdServerTimestamp = ros::Time::now().toNSec();
 
             if(pBKF->isBad())

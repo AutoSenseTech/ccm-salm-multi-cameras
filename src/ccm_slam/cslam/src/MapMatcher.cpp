@@ -115,51 +115,54 @@ void MapMatcher::Run()
         {
             if(CheckBKfQueue())
             {
-                
+                cout<<"Enter 线程 4"<<endl;
                 bool bDetect = DetectLoop();
+                cout<<"bDetect: "<<bDetect<<endl;
                 if(bDetect)
                 {
-                    //cout<<"compute sim3"<<endl;
+                    cout<<"compute sim3"<<endl;
                     bool bSim3 = ComputeSim3();
-                    //cout<<"compute sim3 finish"<<endl;
+                    cout<<"compute sim3 finish"<<endl;
                     isSim3 = bSim3;
                     if(bSim3)
                     {
                         //cout<<"you sim3"<<endl;
                         // Perform loop fusion and pose graph optimization
                         CorrectLoop();
+                        cout<<"CorrectLoop finish"<<endl;
                     }
                 }
             }
         }
         // cv::Mat tmp = cv::Mat::ones(4,4, CV_32F);
         // tmp.copyTo(mScw);
-        if(!mScw.empty())//暂时先不运行
-        {
-            // cv::Mat tmp 
-            //cout<<"++++++++++++++++++++++++++++++++++这里是mapmatch++++++++++++++++"<<endl;
-            mmSkelepos=mpComm->GetSkelepos();
-            if(!mmSkelepos.empty()&&!mmSkelepos.rbegin()->second.empty())
-            {
-                //cout<<"+++++server time & pos size: "<<mmSkelepos.begin()->first<<", "<<mmSkelepos.begin()->second.size()<<endl;
-                //cout<<"++++++++++++++++++++++++++++++++++not empty1++++++++++++++++"<<endl;
-                double timeThreshold=0.5;
-                kfptr cloestKF = FindClosestKeyFrame(timeThreshold);
-                //cout<<"++++++++++++++++++++++++++++++++++not empty2++++++++++++++++"<<endl;
-                if(cloestKF)
-                {
-                    vector<cv::Mat> clientoPos = TransferToCurrentFrame(mmSkelepos, cloestKF);
-                    //cout<<"++++++++++++++++++++++++++++++++++not empty3++++++++++++++++"<<endl;
-                    map<double, vector<float>> result =  TransferToOtherFrame(clientoPos);
-                    //cout<<"+++++++++++++update skele posinputPose!+++++++++++++++"<<result.begin()->second.size()<<endl;
-                    mpComm1->PassSkePointstoComm(result);
-                    //cout<<"++++++++++++++++++++++++++++++++++not empty4++++++++++++++++"<<endl;
-                }
+        //TODO
+        // if(!mScw.empty())//暂时先不运行
+        // {
+        //     // cv::Mat tmp 
+        //     //cout<<"++++++++++++++++++++++++++++++++++这里是mapmatch++++++++++++++++"<<endl;
+        //     mmSkelepos=mpComm->GetSkelepos();
+        //     if(!mmSkelepos.empty()&&!mmSkelepos.rbegin()->second.empty())
+        //     {
+        //         //cout<<"+++++server time & pos size: "<<mmSkelepos.begin()->first<<", "<<mmSkelepos.begin()->second.size()<<endl;
+        //         //cout<<"++++++++++++++++++++++++++++++++++not empty1++++++++++++++++"<<endl;
+        //         double timeThreshold=0.5;
+        //         kfptr cloestKF = FindClosestKeyFrame(timeThreshold);
+        //         //cout<<"++++++++++++++++++++++++++++++++++not empty2++++++++++++++++"<<endl;
+        //         if(cloestKF)
+        //         {
+        //             vector<cv::Mat> clientoPos = TransferToCurrentFrame(mmSkelepos, cloestKF);
+        //             //cout<<"++++++++++++++++++++++++++++++++++not empty3++++++++++++++++"<<endl;
+        //             map<double, vector<float>> result =  TransferToOtherFrame(clientoPos);
+        //             //cout<<"+++++++++++++update skele posinputPose!+++++++++++++++"<<result.begin()->second.size()<<endl;
+        //             mpComm1->PassSkePointstoComm(result);
+        //             //cout<<"++++++++++++++++++++++++++++++++++not empty4++++++++++++++++"<<endl;
+        //         }
 
-            }
+        //     }
             
-        }
-
+        // }
+        //ENDTO
 
         #ifdef LOGGING
         pCC->mpLogger->SetMatch(__LINE__,0);

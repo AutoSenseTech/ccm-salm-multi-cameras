@@ -93,8 +93,8 @@ public:
     };
 
 public:
-    Viewer(mapptr pMap, ccptr pCC);
-    //Viewer(bmapptr pBMap, ccptr pCC);
+    //Viewer(mapptr pMap, ccptr pCC);
+    Viewer(bmapptr pBMap, ccptr pCC);
     ~Viewer(){
         fout_traj.close();
     }
@@ -109,6 +109,7 @@ public:
     //Map Drawing
     void DrawMap(mapptr pMap);
 
+    void DrawBMap(bmapptr pBMap);
     //Clearing
     void ClearCovGraph(size_t MapId);
 

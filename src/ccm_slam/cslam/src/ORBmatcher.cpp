@@ -1635,10 +1635,10 @@ int ORBmatcher::Fuse(kfptr pKF, const vector<mpptr> &vpMapPoints, const float th
 int ORBmatcher::Fuse(bkfptr pBKFs, const vector<mpptr> &vpMapPoints, const float th)
 {
     int cameraNum = pBKFs->cameraNum;
-
+    
     vector<cv::Mat> vRcw(cameraNum);
     vector<cv::Mat> vtcw(cameraNum);
-
+    
     for(int subkeyframeid = 0 ; subkeyframeid < cameraNum; subkeyframeid++)
     {
         cv::Mat Tciw = pBKFs->vmTi0[subkeyframeid] * pBKFs->GetPose();
@@ -1647,7 +1647,7 @@ int ORBmatcher::Fuse(bkfptr pBKFs, const vector<mpptr> &vpMapPoints, const float
         vRcw[subkeyframeid] = Rciw;
         vtcw[subkeyframeid] = tciw;
     }
-    
+   
     int nFused=0;
 
     const int nMPs = vpMapPoints.size();
@@ -1663,7 +1663,7 @@ int ORBmatcher::Fuse(bkfptr pBKFs, const vector<mpptr> &vpMapPoints, const float
             continue;
 
         cv::Mat p3Dw = pMP->GetWorldPos();
-
+     
         for(int k =0; k < cameraNum; k++)
         {
             cv::Mat p3Dc = vRcw[k]*p3Dw + vtcw[k];
@@ -1682,7 +1682,7 @@ int ORBmatcher::Fuse(bkfptr pBKFs, const vector<mpptr> &vpMapPoints, const float
             // Point must be inside the image
             if(!pBKFs->IsInImage(u,v, k))
                 continue;
-          
+            
             const float maxDistance = pMP->GetMaxDistanceInvariance();
             const float minDistance = pMP->GetMinDistanceInvariance();
             cv::Mat twi = pBKFs->GetCameraCenter(k);
@@ -1699,7 +1699,7 @@ int ORBmatcher::Fuse(bkfptr pBKFs, const vector<mpptr> &vpMapPoints, const float
             if(PO.dot(Pn)<0.5*dist3D)
                 continue;
 
-        
+            
             int nPredictedLevel = pMP->PredictScale(dist3D,pBKFs);
         
             // Search in a radius
@@ -1763,7 +1763,6 @@ int ORBmatcher::Fuse(bkfptr pBKFs, const vector<mpptr> &vpMapPoints, const float
             // If there is already a MapPoint replace otherwise add new measurement
             if(bestDist<=TH_LOW)
             {
-                
                 mpptr pMPinBKF = pBKFs->GetMapPoint(bestIndex);
                 if(pMPinBKF)
                 {
@@ -1785,6 +1784,7 @@ int ORBmatcher::Fuse(bkfptr pBKFs, const vector<mpptr> &vpMapPoints, const float
                     pBKFs->AddMapPoint(pMP,bestIndex);
                     
                 }
+                
                 nFused++;
             }
         }

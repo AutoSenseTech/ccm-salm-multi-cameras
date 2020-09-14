@@ -175,6 +175,7 @@ BundledKeyFrames::BundledKeyFrames(ccmslam_msgs::BKF* pMsg, vocptr pVoc, bmapptr
 
     mbOmitSending = true;
 
+    
     if(mSysState == eSystemState::SERVER)
     {
         mUniqueId = UniqueId;
@@ -192,8 +193,17 @@ BundledKeyFrames::BundledKeyFrames(ccmslam_msgs::BKF* pMsg, vocptr pVoc, bmapptr
     }
 
     mspComm.insert(pComm);
-
+    
     this->WriteMembersFromMessage(pMsg,mg2oS_wcurmap_wclientmap); 
+    
+    vmTi0.resize(cameraNum);
+    for(int id = 0; id < cameraNum; id++)
+    {
+        cv::Mat Ti0 = cv::Mat::eye(4,4,CV_32F);
+        for(int x = 0; x < id; x++)
+            Ti0 =  mvTcamji[x] * Ti0;
+        vmTi0[id] = Ti0;
+    }
 
     for(int id = 0; id < cameraNum; id++)
         AssignFeaturesToGrid(id);
@@ -1782,7 +1792,7 @@ cv::Mat BundledKeyFrames::GetPoseInverse()
 void BundledKeyFrames::WriteMembersFromMessage(ccmslam_msgs::BKF *pMsg, g2o::Sim3 mg2oS_wcurmap_wclientmap)
 {
     mbSentOnce=true;
-    cameraNum = 2; //todo 2->4;
+  
     mId = make_pair(pMsg->mnId,pMsg->mClientId);
     mTimeStamp = pMsg->dTimestamp;
     mnGridCols = pMsg->mnGridCols;
@@ -1795,7 +1805,7 @@ void BundledKeyFrames::WriteMembersFromMessage(ccmslam_msgs::BKF *pMsg, g2o::Sim
         mvGridElementWidthInv[idx] = pMsg->mvGridElementWidthInv[idx];
         mvGridElementHeightInv[idx] = pMsg->mvGridElementHeightInv[idx];
     }
-
+ 
     vfx.resize(pMsg->vfx.size());
     vfy.resize(pMsg->vfx.size());
     vcx.resize(pMsg->vfx.size());
@@ -1813,7 +1823,7 @@ void BundledKeyFrames::WriteMembersFromMessage(ccmslam_msgs::BKF *pMsg, g2o::Sim
         vinvfy[id]=pMsg->vinvfy[id];
 
     }
-
+  
     N=pMsg->N;
 
     mvpkeyPointsNum.resize(pMsg->mvpkeyPointsNum.size());
@@ -1821,7 +1831,7 @@ void BundledKeyFrames::WriteMembersFromMessage(ccmslam_msgs::BKF *pMsg, g2o::Sim
     {
         mvpkeyPointsNum[idx] = pMsg->mvpkeyPointsNum[idx];
     }
-
+ 
     vKeyPointsIndexMapPlus.resize(pMsg->vKeyPointsIndexMapPlus.size());
     for(int idx = 0; idx < pMsg->vKeyPointsIndexMapPlus.size(); idx++)
     {
@@ -1835,8 +1845,9 @@ void BundledKeyFrames::WriteMembersFromMessage(ccmslam_msgs::BKF *pMsg, g2o::Sim
     for(int id = 0; id < pMsg->mvTcamji.size(); id++)
     {
         ccmslam_msgs::Tcamji TcamjiMsg = pMsg->mvTcamji[id];
+  
         mvTcamji[id] = cv::Mat::eye(4,4,CV_32F);
-        for(int idx = 0; idx < 4; id++)
+        for(int idx = 0; idx < 4; idx++)
         {   
             for(int idy = 0; idy < 4;idy++)
             {
@@ -1844,7 +1855,7 @@ void BundledKeyFrames::WriteMembersFromMessage(ccmslam_msgs::BKF *pMsg, g2o::Sim
             }
         }  
     }
-
+ 
     mnScaleLevels=pMsg->mnScaleLevels;
     mfScaleFactor=pMsg->mfScaleFactor;
     mfLogScaleFactor=pMsg->mfLogScaleFactor;
@@ -1893,7 +1904,7 @@ void BundledKeyFrames::WriteMembersFromMessage(ccmslam_msgs::BKF *pMsg, g2o::Sim
             }
         }
     }
-
+  
     ccmslam_msgs::Descriptor TempDesc = pMsg->mDescriptors[0]; //Mat
     int iBoundY = static_cast<int>(TempDesc.mDescriptor.size()); //32
     int iBoundX = static_cast<int>(pMsg->mDescriptors.size()); //n
@@ -1907,7 +1918,7 @@ void BundledKeyFrames::WriteMembersFromMessage(ccmslam_msgs::BKF *pMsg, g2o::Sim
             mDescriptors.at<uint8_t>(idx,idy)=DescMsg.mDescriptor[idy];
         }
     }
-
+  
 
     for(int idx=0;idx<mnScaleLevels;++idx)
         mvScaleFactors.push_back(pMsg->mvScaleFactors[idx]);
@@ -1933,7 +1944,7 @@ void BundledKeyFrames::WriteMembersFromMessage(ccmslam_msgs::BKF *pMsg, g2o::Sim
         Converter::MsgArrayFixedSizeToCvMat<ccmslam_msgs::Vfloat32::_mK_type,float>(mvpK[id],Vfloat32Msg.mK);
     }
 
-    
+   
 
     if(!mBowVec.empty() || !mFeatVec.empty())
     {

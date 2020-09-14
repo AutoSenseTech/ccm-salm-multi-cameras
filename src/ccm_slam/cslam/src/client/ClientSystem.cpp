@@ -60,24 +60,14 @@ ClientSystem::ClientSystem(ros::NodeHandle Nh, ros::NodeHandle NhPrivate, const 
 
     this->LoadVocabulary(strVocFile);
 
-    //+++++ Create KeyFrame Database +++++
-    //mpKFDB.reset(new KeyFrameDatabase(mpVoc));
+    //+++++ Create BundledKeyFrames Database +++++
     mpBKFDB.reset(new BundledKeyFramesDatabase(mpVoc));
 
-    //+++++ Create the Map +++++
-    //mpMap.reset(new Map(mNh,mNhPrivate,mClientId,eSystemState::CLIENT));
+    //+++++ Create the BMap +++++
     mpBMap.reset(new BundledMap(mNh,mNhPrivate,mClientId,eSystemState::CLIENT));
     
     usleep(10000); //wait to avoid race conditions
    
-//    FIXME:
-    // //+++++ Initialize Agent +++++
-    // mpAgent.reset(new ClientHandler(mNh,mNhPrivate,mpVoc,mpKFDB,mpMap,mClientId,mpUID,eSystemState::CLIENT,strCamFile,nullptr));
-    // usleep(10000); //wait to avoid race conditions
-    //mpAgent->InitializeThreads();
-    // usleep(10000); //wait to avoid race conditions
-//     FIXME:
-    //++++++++++
     cout << endl << "Clientsystem (multi-camera system) initialized (Client ID: " << mClientId << ")" << endl;
 }
 

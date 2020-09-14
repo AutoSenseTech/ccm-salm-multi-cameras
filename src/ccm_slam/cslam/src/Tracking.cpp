@@ -257,14 +257,14 @@ Tracking::Tracking(ccptr pCC, vocptr pVoc, viewptr pFrameViewer, bmapptr pBMap, 
         if(!mpCC) cout << "mpCC == nullptr" << endl;
         throw estd::infrastructure_ex();
     }
-//todo do not forget to uncomment
-    // if(!mpViewer)
-    // {
-    //     cout << "\033[1;31m!!!!! ERROR !!!!!\033[0m " << __func__ << ": nullptr given"<< endl;
-    //     if(!mpViewer) cout << "mpViewer == nullptr" << endl;
-    //     throw estd::infrastructure_ex();
-    // }
-//end todo
+
+    if(!mpViewer)
+    {
+        cout << "\033[1;31m!!!!! ERROR !!!!!\033[0m " << __func__ << ": nullptr given"<< endl;
+        if(!mpViewer) cout << "mpViewer == nullptr" << endl;
+        throw estd::infrastructure_ex();
+    }
+
 }
 
 // cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp)
@@ -612,226 +612,6 @@ cv::Mat Tracking::GrabImageMultiple(const vector<cv::Mat>&vImages, const double 
 
 }
 
-// void Tracking::Track()
-// {
-//     // if (mCurrentFrame->mId.first%10 ==0 )
-//     //     cout<<"遍历"<<mCurrentFrame->mId.first<<"帧,加入"<<mpMap->KeyFramesInMap()<<"关键帧"<<endl;
-
-//     if(mState==NO_IMAGES_YET)
-//     {
-//         mState = NOT_INITIALIZED;
-//     }
-
-
-//     mLastProcessedState=mState;
-
-//     // Get Map Mutex -> Map cannot be changed
-//     while(!mpMap->LockMapUpdate()){
-//         usleep(params::timings::miLockSleep);
-//     }
-
-//     //Comm Mutex cannot be acquired here. In case of wrong initialization, there is mutual dependency in the call of reset()
-//     if(mState==NOT_INITIALIZED)
-//     {
-        
-//         if(mSensor == CentralControl::STEREO)
-//             StereoInitialization(); //需要加入双目初始化
-//         else
-//             MonocularInitialization();
-
-//         if(params::vis::mbActive)//==0  不进
-//             mpViewer->UpdateAndDrawFrame(); //get the errors  11.20
-//         else // FIXME: 这里少了一个else
-//         {
-//             //cout << "\033[1;35m!!! +++ Tracking: Init +++ !!!\033[0m" << endl;
-//         }
-
-//         if(mState!=OK)
-//         {
-//             mpMap->UnLockMapUpdate();
-//             return;
-//         }
-//     }
-//     else
-//     {
-//         // cout<<"Frame: "<<++count<<" Initialization successfully!"<<endl;
-//         // Get Communicator Mutex -> Comm cannot publish. Assure no publishing whilst changing data
-//         if(params::sys::mbStrictLock) while(!mpCC->LockTracking()){
-//             usleep(params::timings::miLockSleep);
-//         }
-
-//         // System is initialized. Track Frame.
-//         bool bOK;
-
-
-//         //少了一个纯定位的模式，只有正常VO的过程
-//         // Initial camera pose estimation using motion model or relocalization (if tracking is lost)
-//         if(mState==OK) //normal initial 
-//         {
-//             // Local Mapping might have changed some MapPoints tracked in last frame
-//             CheckReplacedInLastFrame();
-
-//             if(mVelocity.empty() || mCurrentFrame->mId.first<mLastRelocFrameId.first+2)
-//             {
-                    
-//                     //std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
-//                     bOK = TrackReferenceKeyFrame();
-//                     //std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
-//                     // ttrack= std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
-//                     //cout<<"TrackReferenceKeyFrame++++++++++: "<<bOK<<endl;
-//             }
-//             else
-//             {
-//                    // std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
-//                     bOK = TrackWithMotionModel();
-//                    // std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
-//                     //double ttrack= std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
-//                     //cout<<"Motion model++++++++++: "<<bOK<<endl;
-
-//                 if(!bOK)
-//                 {
-
-//                     //std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
-//                     bOK = TrackReferenceKeyFrame();
-
-//                     //std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
-//                     //double ttrack= std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
-//                     //cout<<"motion不行 TrackReferenceKeyFrame++++++++++: "<<bOK<<endl;
-                
-//                 }
-//             }
-//         }
-//         else
-//         {
-
-//             cout << "\033[1;35m!!! +++ Tracking: Lost +++ !!!\033[0m" <<mCurrentFrame->mId.first<< endl;
-//             bOK = false; // 没有重定位过程
-//         }
-
-//         mCurrentFrame->mpReferenceKF = mpReferenceKF;
-
-//         // If we have an initial estimation of the camera pose and matching. Track the local map.
-//         if(bOK)
-//         {
-//            // std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
-//             bOK = TrackLocalMap(); 
-//             //std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
-//             //double ttrack= std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
-//             //cout<<"TrackLocalMap++++++++++:"<<bOK<<endl;
-//         } 
-
-//         if(bOK)
-//             mState = OK;
-//         else
-//             mState=LOST;
-            
-
-//         // Update drawer
-//         if(params::vis::mbActive) mpViewer->UpdateAndDrawFrame();
-
-//         // If tracking were good, check if we insert a keyframe
-//         if(bOK)
-//         {
-//             //cout<<"跟踪情况良好++++++++++"<<endl;
-//             // Update motion model
-//             if(!mLastFrame->mTcw.empty())
-//             {
-//                 //cout<<"如果上一帧位姿不为空，更新匀速运动模型速度++++++++++"<<endl;
-//                 cv::Mat LastTwc = cv::Mat::eye(4,4,CV_32F);
-//                 mLastFrame->GetRotationInverse().copyTo(LastTwc.rowRange(0,3).colRange(0,3));
-//                 mLastFrame->GetCameraCenter().copyTo(LastTwc.rowRange(0,3).col(3));
-//                 mVelocity = mCurrentFrame->mTcw*LastTwc; //Tcl, the roration betweent last frame and  current frame
-//             }
-//             else
-//             {
-//                 //cout<<"如果上一帧位姿为空，将匀速运动模型速度设置为空++++++++++"<<endl;
-//                 mVelocity = cv::Mat();
-//             }
-                
-
-//             // Clean VO matches
-//             for(int i=0; i<mCurrentFrame->N; i++)
-//             {
-//                 mpptr pMP = mCurrentFrame->mvpMapPoints[i];
-//                 if(pMP)
-//                     if(pMP->Observations()<1)
-//                     {
-//                         mCurrentFrame->mvbOutlier[i] = false;
-//                         mCurrentFrame->mvpMapPoints[i]=nullptr;
-//                     }
-//             }
-
-//             //清除用恒速度双目跟踪中，生成的临时地图点，这些点时在UpdateLastFrame函数中生成的；这些点只是为了提高跟踪精度，并不要用于建图
-//             for(list<mpptr>::iterator lit = mlpTemporalPoints.begin(), lend = mlpTemporalPoints.end(); lit!=lend; lit++)
-//             {
-//                 mpptr pMp = *lit; // 需要再次确定FIXME:
-//                 pMp.reset();  //对之前在地图点中的指针也进行释放,即比较彻底的删除了
-//                 // delete pMp; 
-//             }
-
-//             mlpTemporalPoints.clear();
-//             // Check if we need to insert a new keyframe
-//             if(NeedNewKeyFrame())
-//             {
-//                 //cout<<"需要创建关键帧++++++++++"<<endl;
-//                 CreateNewKeyFrame();
-//             }
-                
-
-//             // We allow points with high innovation (considererd outliers by the Huber Function)
-//             // pass to the new keyframe, so that bundle adjustment will finally decide
-//             // if they are outliers or not. We don't want next frame to estimate its position
-//             // with those points so we discard them in the frame.
-//             for(int i=0; i<mCurrentFrame->N;i++)
-//             {
-//                 if(mCurrentFrame->mvpMapPoints[i] && mCurrentFrame->mvbOutlier[i])
-//                     mCurrentFrame->mvpMapPoints[i]=nullptr;
-//             }
-//         }
-
-//         // Reset if the camera get lost soon after initialization
-//         if(mState==LOST)
-//         {
-//             if(mpMap->KeyFramesInMap()<=params::tracking::miInitKFs)//5
-//             {
-//                 cout<<"    RESET时具有"<<mpMap->KeyFramesInMap()<<" 关键帧 "<<endl;
-//                 //cout << "Track lost soon after initialisation, reseting..." << endl;
-//                 if(params::sys::mbStrictLock) mpCC->UnLockTracking();
-//                 mpMap->UnLockMapUpdate();
-//                 mpCC->mpCH->Reset(); //clientHandler调用reset()对系统进行了重启
-
-//                 return;
-//             }
-//         }
-
-//         if(!mCurrentFrame->mpReferenceKF)
-//             mCurrentFrame->mpReferenceKF = mpReferenceKF;
-
-//         mLastFrame.reset(new Frame(*mCurrentFrame));
-
-//         if(params::sys::mbStrictLock) mpCC->UnLockTracking();
-//     }
-
-//     // Store frame pose information to retrieve the complete camera trajectory afterwards.
-//     if(!mCurrentFrame->mTcw.empty())
-//     {
-//         cv::Mat Tcr = mCurrentFrame->mTcw*mCurrentFrame->mpReferenceKF->GetPoseInverse();
-//         mlRelativeFramePoses.push_back(Tcr);
-//         mlpReferences.push_back(mpReferenceKF);
-//         mlFrameTimes.push_back(mCurrentFrame->mTimeStamp);
-//         mlbLost.push_back(mState==LOST);
-//     }
-//     else
-//     {
-//         // This can happen if tracking is lost
-//         mlRelativeFramePoses.push_back(mlRelativeFramePoses.back());
-//         mlpReferences.push_back(mlpReferences.back());
-//         mlFrameTimes.push_back(mlFrameTimes.back());
-//         mlbLost.push_back(mState==LOST);
-//     }
-
-//     mpMap->UnLockMapUpdate();
-// }
 
 void Tracking::Track()
 {
@@ -1422,23 +1202,7 @@ void Tracking::CheckReplacedInLastFrame()
         }
     }
 }
-// void Tracking::CheckReplacedInLastFrame()//修改过   本函数采用ORBSLAM2的版本
-// {
-//     cout<<"CheckReplacedInLastFrame更新上一帧的地图点信息++++++++++"<<endl;
-//     for(int i =0; i<mLastFrame->N; i++)
-//     {
-//         mpptr pMP = mLastFrame->mvpMapPoints[i];
 
-//         if(pMP)
-//         {
-//             mpptr pRep = pMP->GetReplaced();
-//             if(pRep)
-//             {
-//                 mLastFrame->mvpMapPoints[i] = pRep;
-//             }
-//         }
-//     }
-// }
 
 
 bool Tracking::TrackReferenceKeyFrame()
@@ -1493,7 +1257,7 @@ bool Tracking::TrackReferenceBundledKeyFrames()
     mCurrentFrame->ComputeBoW();
 
     mpReferenceBKFs->ComputeBoW();
-
+    //cout<<"=================chose TrackReferenceBundledKeyFrames model========"<<endl;
     // We perform first an ORB matching with the reference keyframe
     // If enough matches are found we setup a PnP solver
     ORBmatcher matcher(0.7,true);
@@ -1604,7 +1368,8 @@ void Tracking::UpdateLastFrame() //add some temporal map points
 
 bool Tracking::TrackWithMotionModel()
 {
-   
+    
+    //cout<<"=================chose trackwithmotion model========"<<endl;
     ORBmatcher matcher(0.9,true);
 
     // Update last frame pose according to its reference keyframe
@@ -1746,7 +1511,7 @@ bool Tracking::TrackLocalBMap()
         return false;
     }
 
-    if(mnMatchesInliers<params::tracking::miTrackLocalMapInlierThres) //30
+    if(mnMatchesInliers<30) //todo： 30 params::tracking::miTrackLocalMapInlierThres
     {
         cout<<"(track local Bmap) mnMatchesInliers: "<<mnMatchesInliers<<endl;
         return false;
@@ -2033,26 +1798,6 @@ void Tracking::CreateNewBundledKeyFrames()
     if(!mpLocalMapper->SetNotStop(true))
         return;
 
-    // vector<kfptr> tvKeyFrames;
-    // tvKeyFrames.reserve(cameraNum);
-
-    // //create keyframe which is subbundledkeyframe
-    // int frameId = -1;
-    // for(int i = 0; i < cameraNum; i++)
-    // {
-    //     if(i == 0)
-    //     {
-    //         kfptr pKFini {new KeyFrame(*mCurrentFrame,frameId, i, eSystemState::CLIENT,-1)};
-    //         frameId = pKFini->mId.first;
-    //         tvKeyFrames.push_back(pKFini);
-    //     }
-    //     else
-    //     {
-    //         kfptr pKFini {new KeyFrame(*mCurrentFrame,frameId, i, eSystemState::CLIENT,-1)};
-    //         tvKeyFrames.push_back(pKFini);
-    //     }
-    // }
-
     bkfptr pBKFs{new BundledKeyFrames(*mCurrentFrame, mpBMap, mpBundledKeyFramesDB,mpComm,eSystemState::CLIENT,-1)};
 
     std::vector<mpptr> vpM = pBKFs->GetMapPointMatches(); 
@@ -2287,7 +2032,7 @@ void Tracking::SearchLocalPointsPlus()  // the local bmap
             }
 
             int nmatcher = matcher.SearchByProjection(cameraId,*mCurrentFrame,vpLocalMapPoint[cameraId],th); //  the map points associate to current frame's keypoints 
-            cout<<"Camara Id: "<<cameraId<<"has "<<nmatcher<<"matches"<<endl;
+            //cout<<"Camara Id: "<<cameraId<<"has "<<nmatcher<<"matches"<<endl;
         }
     }
   

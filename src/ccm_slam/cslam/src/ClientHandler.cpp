@@ -80,11 +80,12 @@ ClientHandler::ClientHandler(ros::NodeHandle Nh, ros::NodeHandle NhPrivate, vocp
     if(mSysState == eSystemState::CLIENT)
     {
 		
-		
-		if(ClientId==1)
-        {
-            mSubOP=mNh.subscribe<ccmslam_msgs::ObjectPosition> ("ObjectPositionTopicName",10,boost::bind(&ClientHandler::ObejectPositionCb,this,_1));//zmf add
-        }
+		//TODO
+		// if(ClientId==1)
+        // {
+        //     mSubOP=mNh.subscribe<ccmslam_msgs::ObjectPosition> ("ObjectPositionTopicName",10,boost::bind(&ClientHandler::ObejectPositionCb,this,_1));//zmf add
+        // }
+        //ENDTO
         std::string TopicNameCamSub;
 
         mNhPrivate.param("TopicNameCamSub",TopicNameCamSub,string("nospec"));
@@ -402,10 +403,10 @@ void ClientHandler::InitializeClient()
     cout << "Client (multi-camera system) " << mClientId << " --> Initialize Threads" << endl;
 
     //+++++ Create Drawers. These are used by the Viewer +++++
-    //todo
-    //mpViewer.reset(new Viewer(mpMap,mpCC));
-    //usleep(10000);
-    //end todo
+   
+    mpViewer.reset(new Viewer(mpBMap,mpCC));
+    usleep(10000);
+    
 
     //+++++ Initialize the Local Mapping thread +++++
     mpMapping.reset(new LocalMapping(mpCC,mpBMap,mpBKFDB,mpViewer));
@@ -423,7 +424,7 @@ void ClientHandler::InitializeClient()
     usleep(10000);
     mpTracking->SetCommunicator(mpComm);
     mpTracking->SetLocalMapper(mpMapping);
-    //mpViewer->SetTracker(mpTracking);  //do not forget to uncomment
+    mpViewer->SetTracker(mpTracking);  
     usleep(10000);
     //Launch Threads
     //todo
@@ -437,8 +438,8 @@ void ClientHandler::InitializeClient()
 
     //Should no do that before, a fast system might already use a pointe before it was set -> segfault
     mptMapping.reset(new thread(&LocalMapping::RunClient,mpMapping));//todo uncomment
-    //mptComm.reset(new thread(&Communicator::RunClient,mpComm));  //todo uncomment
-    //mptViewer.reset(new thread(&Viewer::RunClient,mpViewer));  //do not forget to uncomment
+    mptComm.reset(new thread(&Communicator::RunClient,mpComm));  //todo uncomment
+    mptViewer.reset(new thread(&Viewer::RunClient,mpViewer));  //do not forget to uncomment
     //todo
 	// if (mClientId == 0)
     // {

@@ -50,7 +50,7 @@ ServerSystem::ServerSystem(ros::NodeHandle Nh, ros::NodeHandle NhPrivate, const 
     this->InitializeBMaps();
 
     //+++++ Create the Viewer +++++
-    //this->InitializeViewer();  //todo
+    this->InitializeViewer();  
 
     #ifdef LOGGING
     mpLogger.reset(new estd::mylog(30.0,10000000));
@@ -122,7 +122,7 @@ void ServerSystem::InitializeClients()
         cout << "\033[1;33m!!! WARN !!!\033[0m Maximum number of clients is " << mMaxClients << endl;
     }
 
-    this->InitializeMapMatcher();
+    this->InitializeBMapMatcher();
 }
 
 void ServerSystem::LoadVocabulary(const string &strVocFile)
@@ -201,7 +201,7 @@ void ServerSystem::InitializeMapMatcher()
 
 void ServerSystem::InitializeBMapMatcher()
 {
-    mpMapMatcher.reset(new MapMatcher(mNh,mNhPrivate,mpKFDB,mpVoc,mpMap0,mpMap1,mpMap2,mpMap3));
+    mpMapMatcher.reset(new MapMatcher(mNh,mNhPrivate,mpBKFDB,mpVoc,mpBMap0,mpBMap1,mpBMap2,mpBMap3));
     mptMapMatching.reset(new thread(&MapMatcher::Run,mpMapMatcher));
 	if(mpClient0)
     {

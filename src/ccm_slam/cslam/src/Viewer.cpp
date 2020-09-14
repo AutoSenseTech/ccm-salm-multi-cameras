@@ -27,135 +27,135 @@
 #include <Eigen/Geometry>
 namespace cslam {
 
-    Viewer::Viewer(mapptr pMap, ccptr pCC)
-            : mpMap(pMap),mpCC(pCC),mbDrawFrame(false)
-    {
-        fout_traj.open( "/home/slam-client/trajectory_server.txt",ios::out|ios::trunc);
-        mState=Tracking::SYSTEM_NOT_READY;
-        mIm = cv::Mat(480,640,CV_8UC3, cv::Scalar(0,0,0));
+    // Viewer::Viewer(mapptr pMap, ccptr pCC)
+    //         : mpMap(pMap),mpCC(pCC),mbDrawFrame(false)
+    // {
+    //     fout_traj.open( "/home/slam-client/trajectory_server.txt",ios::out|ios::trunc);
+    //     mState=Tracking::SYSTEM_NOT_READY;
+    //     mIm = cv::Mat(480,640,CV_8UC3, cv::Scalar(0,0,0));
 
-        std::stringstream* ss;
+    //     std::stringstream* ss;
 
-        if(mpCC->mSysState == eSystemState::CLIENT)
-        {
-            ss = new stringstream;
-            *ss << "ImageClient" << mpCC->mClientId;
+    //     if(mpCC->mSysState == eSystemState::CLIENT)
+    //     {
+    //         ss = new stringstream;
+    //         *ss << "ImageClient" << mpCC->mClientId;
 
-            mpIT.reset(new image_transport::ImageTransport(mNh));
-            mPubIm = mpIT->advertise(ss->str(),1);
+    //         mpIT.reset(new image_transport::ImageTransport(mNh));
+    //         mPubIm = mpIT->advertise(ss->str(),1);
 
-            mSysType = "c";
+    //         mSysType = "c";
 
-            if(mpMap->mMapId == 0)
-            {
-                ss = new stringstream;
-                *ss << "ClientMarkerMap" << mpMap->mMapId;
-                mPubMarker0 = mNh.advertise<visualization_msgs::Marker>(ss->str(),10);
+    //         if(mpMap->mMapId == 0)
+    //         {
+    //             ss = new stringstream;
+    //             *ss << "ClientMarkerMap" << mpMap->mMapId;
+    //             mPubMarker0 = mNh.advertise<visualization_msgs::Marker>(ss->str(),10);
 
-                ss = new stringstream;
-                *ss << "ClientMapPointsMap" << mpMap->mMapId;
-                mPubPcl0 = mNh.advertise<sensor_msgs::PointCloud2>(ss->str(),10);
+    //             ss = new stringstream;
+    //             *ss << "ClientMapPointsMap" << mpMap->mMapId;
+    //             mPubPcl0 = mNh.advertise<sensor_msgs::PointCloud2>(ss->str(),10);
 
-                ss = new stringstream;
-                *ss << "LocalMPs" << mpMap->mMapId;
-                mPubLocalMPs = mNh.advertise<sensor_msgs::PointCloud2>(ss->str(),10);
-            }
-            else if(mpMap->mMapId == 1)
-            {
-                ss = new stringstream;
-                *ss << "ClientMarkerMap" << mpMap->mMapId;
-                mPubMarker1 = mNh.advertise<visualization_msgs::Marker>(ss->str(),10);
+    //             ss = new stringstream;
+    //             *ss << "LocalMPs" << mpMap->mMapId;
+    //             mPubLocalMPs = mNh.advertise<sensor_msgs::PointCloud2>(ss->str(),10);
+    //         }
+    //         else if(mpMap->mMapId == 1)
+    //         {
+    //             ss = new stringstream;
+    //             *ss << "ClientMarkerMap" << mpMap->mMapId;
+    //             mPubMarker1 = mNh.advertise<visualization_msgs::Marker>(ss->str(),10);
 
-                ss = new stringstream;
-                *ss << "ClientMapPointsMap" << mpMap->mMapId;
-                mPubPcl1 = mNh.advertise<sensor_msgs::PointCloud2>(ss->str(),10);
+    //             ss = new stringstream;
+    //             *ss << "ClientMapPointsMap" << mpMap->mMapId;
+    //             mPubPcl1 = mNh.advertise<sensor_msgs::PointCloud2>(ss->str(),10);
 
-                ss = new stringstream;
-                *ss << "LocalMPs" << mpMap->mMapId;
-                mPubLocalMPs = mNh.advertise<sensor_msgs::PointCloud2>(ss->str(),10);
-            }
-            else if(mpMap->mMapId == 2)
-            {
-                ss = new stringstream;
-                *ss << "ClientMarkerMap" << mpMap->mMapId;
-                mPubMarker2 = mNh.advertise<visualization_msgs::Marker>(ss->str(),10);
+    //             ss = new stringstream;
+    //             *ss << "LocalMPs" << mpMap->mMapId;
+    //             mPubLocalMPs = mNh.advertise<sensor_msgs::PointCloud2>(ss->str(),10);
+    //         }
+    //         else if(mpMap->mMapId == 2)
+    //         {
+    //             ss = new stringstream;
+    //             *ss << "ClientMarkerMap" << mpMap->mMapId;
+    //             mPubMarker2 = mNh.advertise<visualization_msgs::Marker>(ss->str(),10);
 
-                ss = new stringstream;
-                *ss << "ClientMapPointsMap" << mpMap->mMapId;
-                mPubPcl2 = mNh.advertise<sensor_msgs::PointCloud2>(ss->str(),10);
+    //             ss = new stringstream;
+    //             *ss << "ClientMapPointsMap" << mpMap->mMapId;
+    //             mPubPcl2 = mNh.advertise<sensor_msgs::PointCloud2>(ss->str(),10);
 
-                ss = new stringstream;
-                *ss << "LocalMPs" << mpMap->mMapId;
-                mPubLocalMPs = mNh.advertise<sensor_msgs::PointCloud2>(ss->str(),10);
-            }
-            else if(mpMap->mMapId == 3)
-            {
-                ss = new stringstream;
-                *ss << "ClientMarkerMap" << mpMap->mMapId;
-                mPubMarker3 = mNh.advertise<visualization_msgs::Marker>(ss->str(),10);
+    //             ss = new stringstream;
+    //             *ss << "LocalMPs" << mpMap->mMapId;
+    //             mPubLocalMPs = mNh.advertise<sensor_msgs::PointCloud2>(ss->str(),10);
+    //         }
+    //         else if(mpMap->mMapId == 3)
+    //         {
+    //             ss = new stringstream;
+    //             *ss << "ClientMarkerMap" << mpMap->mMapId;
+    //             mPubMarker3 = mNh.advertise<visualization_msgs::Marker>(ss->str(),10);
 
-                ss = new stringstream;
-                *ss << "ClientMapPointsMap" << mpMap->mMapId;
-                mPubPcl3 = mNh.advertise<sensor_msgs::PointCloud2>(ss->str(),10);
+    //             ss = new stringstream;
+    //             *ss << "ClientMapPointsMap" << mpMap->mMapId;
+    //             mPubPcl3 = mNh.advertise<sensor_msgs::PointCloud2>(ss->str(),10);
 
-                ss = new stringstream;
-                *ss << "LocalMPs" << mpMap->mMapId;
-                mPubLocalMPs = mNh.advertise<sensor_msgs::PointCloud2>(ss->str(),10);
-            }
-            else
-                cout << "\033[1;31m!!!!! ERROR !!!!!\033[0m " << __func__ << __LINE__ << ": mpMap->mMapId not in [0,3]" << endl;
-        }
-        else
-        {
-            mSysType = "s";
+    //             ss = new stringstream;
+    //             *ss << "LocalMPs" << mpMap->mMapId;
+    //             mPubLocalMPs = mNh.advertise<sensor_msgs::PointCloud2>(ss->str(),10);
+    //         }
+    //         else
+    //             cout << "\033[1;31m!!!!! ERROR !!!!!\033[0m " << __func__ << __LINE__ << ": mpMap->mMapId not in [0,3]" << endl;
+    //     }
+    //     else
+    //     {
+    //         mSysType = "s";
 
-            //++++++++++ Map 0 +++++++++
+    //         //++++++++++ Map 0 +++++++++
 
-            ss = new stringstream;
-            *ss << "ServerMarkerMap0";
-            mPubMarker0 = mNh.advertise<visualization_msgs::Marker>(ss->str(),10);
+    //         ss = new stringstream;
+    //         *ss << "ServerMarkerMap0";
+    //         mPubMarker0 = mNh.advertise<visualization_msgs::Marker>(ss->str(),10);
 
-            ss = new stringstream;
-            *ss << "ServerMapPointsMap0";
-            mPubPcl0 = mNh.advertise<sensor_msgs::PointCloud2>(ss->str(),10);
+    //         ss = new stringstream;
+    //         *ss << "ServerMapPointsMap0";
+    //         mPubPcl0 = mNh.advertise<sensor_msgs::PointCloud2>(ss->str(),10);
 
-            //++++++++++ Map 1 +++++++++
+    //         //++++++++++ Map 1 +++++++++
 
-            ss = new stringstream;
-            *ss << "ServerMarkerMap1";
-            mPubMarker1 = mNh.advertise<visualization_msgs::Marker>(ss->str(),10);
+    //         ss = new stringstream;
+    //         *ss << "ServerMarkerMap1";
+    //         mPubMarker1 = mNh.advertise<visualization_msgs::Marker>(ss->str(),10);
 
-            ss = new stringstream;
-            *ss << "ServerMapPointsMap1";
-            mPubPcl1 = mNh.advertise<sensor_msgs::PointCloud2>(ss->str(),10);
+    //         ss = new stringstream;
+    //         *ss << "ServerMapPointsMap1";
+    //         mPubPcl1 = mNh.advertise<sensor_msgs::PointCloud2>(ss->str(),10);
 
-            //++++++++++ Map 2 +++++++++
+    //         //++++++++++ Map 2 +++++++++
 
-            ss = new stringstream;
-            *ss << "ServerMarkerMap2";
-            mPubMarker2 = mNh.advertise<visualization_msgs::Marker>(ss->str(),10);
+    //         ss = new stringstream;
+    //         *ss << "ServerMarkerMap2";
+    //         mPubMarker2 = mNh.advertise<visualization_msgs::Marker>(ss->str(),10);
 
-            ss = new stringstream;
-            *ss << "ServerMapPointsMap2";
-            mPubPcl2 = mNh.advertise<sensor_msgs::PointCloud2>(ss->str(),10);
+    //         ss = new stringstream;
+    //         *ss << "ServerMapPointsMap2";
+    //         mPubPcl2 = mNh.advertise<sensor_msgs::PointCloud2>(ss->str(),10);
 
-            //++++++++++ Map 3 +++++++++
+    //         //++++++++++ Map 3 +++++++++
 
-            ss = new stringstream;
-            *ss << "ServerMarkerMap3";
-            mPubMarker3 = mNh.advertise<visualization_msgs::Marker>(ss->str(),10);
+    //         ss = new stringstream;
+    //         *ss << "ServerMarkerMap3";
+    //         mPubMarker3 = mNh.advertise<visualization_msgs::Marker>(ss->str(),10);
 
-            ss = new stringstream;
-            *ss << "ServerMapPointsMap3";
-            mPubPcl3 = mNh.advertise<sensor_msgs::PointCloud2>(ss->str(),10);
-        }
+    //         ss = new stringstream;
+    //         *ss << "ServerMapPointsMap3";
+    //         mPubPcl3 = mNh.advertise<sensor_msgs::PointCloud2>(ss->str(),10);
+    //     }
 
-        delete ss;
+    //     delete ss;
 
-        mvNumPoints.resize(4,0);
-    }
+    //     mvNumPoints.resize(4,0);
+    // }
 
-/*    Viewer::Viewer(bmapptr pBMap, ccptr pCC)
+    Viewer::Viewer(bmapptr pBMap, ccptr pCC)
             :mpBMap(pBMap),mpCC(pCC),mbDrawFrame(false)
     {
         fout_traj.open( "/home/slam-client/trajectory_server.txt",ios::out|ios::trunc);
@@ -281,7 +281,7 @@ namespace cslam {
         delete ss;
 
         mvNumPoints.resize(4,0);
-    }*/
+    }
 
     void Viewer::RunClient()
     {

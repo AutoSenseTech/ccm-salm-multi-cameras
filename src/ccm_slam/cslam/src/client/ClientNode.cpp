@@ -76,18 +76,13 @@ int main(int argc, char **argv) {
 
     // <hxy>
     cslam::ClientSystem myClientSystem(Nh,NhPrivate,argv[1],argv[2]);
-//stereo
-    // cslam::ClientHandler myClientHandler(myClientSystem.mNh,
-    //     myClientSystem.mNhPrivate,myClientSystem.mpVoc,myClientSystem.mpKFDB,
-    //     myClientSystem.mpMap,myClientSystem.mClientId,myClientSystem.mpUID,
-    //     cslam::eSystemState::CLIENT,myClientSystem.mstrCamFile,nullptr);
+
 //for multi-camera
     cslam::ClientHandler myClientHandlerMulti(myClientSystem.mNh,
         myClientSystem.mNhPrivate,myClientSystem.mpVoc,myClientSystem.mpBKFDB,
         myClientSystem.mpBMap,myClientSystem.mClientId,myClientSystem.mpUID,
         cslam::eSystemState::CLIENT,myClientSystem.mstrCamFile,nullptr);
 
-    //(myClientSystem.mpAgent).reset(&myClientHandler);
     (myClientSystem.mpAgent).reset(&myClientHandlerMulti);
     usleep(10000); //wait to avoid race conditions
     (myClientSystem.mpAgent)->InitializeThreads();

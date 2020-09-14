@@ -18,8 +18,8 @@
 
   <param name="~TopicNameCamSub" type="string" value="/cam0/image_raw1" />
 
-  <param name="~MapInTopicName" type="string" value="MapOutServer1" unless="$(arg dist)" />
-  <param name="~MapInTopicName" type="string" value="MapOutServer1Disturbed" if="$(arg dist)" />
+  <param name="~MapInTopicName" type="string" value="BMapOutServer1" unless="$(arg dist)" />
+  <param name="~MapInTopicName" type="string" value="BMapOutServer1Disturbed" if="$(arg dist)" />
 
 </node>
 

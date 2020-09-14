@@ -88,11 +88,11 @@ void LocalMapping::RunClient()
             if(!CheckNewBundledKeyFrames())
             {
                 long temp_time = long(mpCurrentBundledKeyFrames->mTimeStamp*100 - 140363650000);
-                cout<<"第"<<mpCurrentBundledKeyFrames->mId.first<<"帧时间戳 :"<<temp_time<<endl;
+                //cout<<"第"<<mpCurrentBundledKeyFrames->mId.first<<"帧时间戳 :"<<temp_time<<endl;
                 //Find more matches in neighbor keyframes and fuse point duplications
                 SearchInNeighbors();
                
-                cout<<"SearchInNeighbors success"<<endl;
+                //cout<<"SearchInNeighbors success"<<endl;
             }
 
             mbAbortBA = false;
@@ -150,7 +150,7 @@ void LocalMapping::RunServer()
         if(CheckNewBundledKeyFrames())
         {
 
-            //cout <<"线程3:进入Mapping " <<endl;
+            cout <<"线程3:进入Mapping" <<endl;
             #ifdef LOGGING
             mpCC->mpLogger->SetMapping(__LINE__,mClientId);
             #endif
@@ -170,29 +170,31 @@ void LocalMapping::RunServer()
             #endif
 
             // pop KF from queue
-            //cout <<"线程3:Mapping ProcessNewKeyFrame" <<endl;
+            //cout <<"线程3:Mapping ProcessNewBundledKeyFrames" <<endl;
             ProcessNewBundledKeyFrames();
-            // cout <<"++++第 "<<(mpCurrentKeyFrame->mId.first)<< " NewKeyFrames 进入 runServer" <<endl;
+            //cout <<"++++第 "<<(mpCurrentBundledKeyFrames->mId.first)<< " BundledKeyFrames 进入 runServer" <<endl;
 
             //Visualize
             //mpViewer->DrawMap(mpMap);  //TODO Uncomment
 
             // Check recent MapPoints
             MapPointCullingServer();
+            //cout <<"++++第 "<<(mpCurrentBundledKeyFrames->mId.first)<< " BundledKeyFrames 完成 MapPointCullingServer" <<endl;
 
             if(!CheckNewBundledKeyFrames())
             {
-                // Find more matches in neighbor keyframes and fuse point duplications
-               // cout <<"线程3:Mapping SearchInNeighbors" <<endl;
+                // Find more matches in neighbor BundledKeyFrame and fuse point duplications
+                //cout <<"线程3:Mapping SearchInNeighbors" <<endl;
                 SearchInNeighbors(); 
+                //cout <<"线程3:Mapping SearchInNeighbors 完成" <<endl;
             }
 
-            // Check redundant local Keyframes
+            // Check redundant local BundledKeyFrame
             if(params::mapping::mfRedundancyThres < 1.0 && !CheckNewBundledKeyFrames())
             {
-                //int temp = mpBMap->mmpBundledKeyFrames.size();
+                //int temp = mpBMap->GetAllBundledKeyFrames().size();
                 BundledKeyFramesCullingV3(); 
-                //cout << "进入culling" << (count++) << "次，删除" <<temp - mpBMap->mmpBundledKeyFrames.size()<<"个BKF"<<endl;
+                //cout << "进入culling" << (count++) << "次，删除" << temp- mpBMap->GetAllBundledKeyFrames().size()<<"个BKF"<<endl;
             }
 
             // FIXME:
@@ -764,7 +766,7 @@ void LocalMapping::SearchInNeighbors()
             vpTargetBKFs.push_back(pBKFsi2);
         }
     }
-    
+   
     // Search matches by projection from current KF in target KFs
     ORBmatcher matcher;
     vector<mpptr> vpMapPointMatches = mpCurrentBundledKeyFrames->GetMapPointMatches();
@@ -775,7 +777,7 @@ void LocalMapping::SearchInNeighbors()
 
         matcher.Fuse(pBKFsi,vpMapPointMatches);
     }
-   
+    
     // Search matches by projection from target KFs in current KF
     vector<mpptr> vpFuseCandidates;
     vpFuseCandidates.reserve(vpTargetBKFs.size()*vpMapPointMatches.size());
@@ -797,9 +799,9 @@ void LocalMapping::SearchInNeighbors()
             vpFuseCandidates.push_back(pMP);
         }
     }
- 
+
     matcher.Fuse(mpCurrentBundledKeyFrames,vpFuseCandidates);
-    
+  
     // Update points
     vpMapPointMatches = mpCurrentBundledKeyFrames->GetMapPointMatches();
     for(size_t i=0, iend=vpMapPointMatches.size(); i<iend; i++)
@@ -814,7 +816,6 @@ void LocalMapping::SearchInNeighbors()
             }
         }
     }
-    
     // Update connections in covisibility graph
     mpCurrentBundledKeyFrames->UpdateConnections();
     

@@ -28,14 +28,14 @@
   <!-- Client 0 -->
 
   <param name="FrameId0" type="string" value="odomS0" />
-  <param name="~MapInTopicName0" type="string" value="MapOutClient0" unless="$(arg dist)" />
-  <param name="~MapInTopicName0" type="string" value="MapOutClient0Disturbed" if="$(arg dist)" />
+  <param name="~MapInTopicName0" type="string" value="BMapOutClient0" unless="$(arg dist)" />
+  <param name="~MapInTopicName0" type="string" value="BMapOutClient0Disturbed" if="$(arg dist)" />
 
   <!-- Client 1 -->
 
   <param name="FrameId1" type="string" value="odomS1" />
-  <param name="~MapInTopicName1" type="string" value="MapOutClient1" unless="$(arg dist)" />
-  <param name="~MapInTopicName1" type="string" value="MapOutClient1Disturbed" if="$(arg dist)" />
+  <param name="~MapInTopicName1" type="string" value="BMapOutClient1" unless="$(arg dist)" />
+  <param name="~MapInTopicName1" type="string" value="BMapOutClient1Disturbed" if="$(arg dist)" />
 
   <!-- Client 2 -->
 <!-- 
