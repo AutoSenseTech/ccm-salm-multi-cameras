@@ -637,12 +637,12 @@ void Tracking::Track()
         else
             MonocularInitialization();
 
-        if(params::vis::mbActive)//==0  不进
-            mpViewer->UpdateAndDrawFrame(); //get the errors  11.20
-        else // FIXME: 这里少了一个else
-        {
-            //cout << "\033[1;35m!!! +++ Tracking: Init +++ !!!\033[0m" << endl;
-        }
+        // if(params::vis::mbActive)//==0  不进
+        //     mpViewer->UpdateAndDrawFrame(); //get the errors  11.20
+        // else // FIXME: 这里少了一个else
+        // {
+        //     //cout << "\033[1;35m!!! +++ Tracking: Init +++ !!!\033[0m" << endl;
+        // }
 
         if(mState!=OK)
         {
@@ -725,7 +725,7 @@ void Tracking::Track()
             
 
         // Update drawer
-        if(params::vis::mbActive) mpViewer->UpdateAndDrawFrame();
+        // if(params::vis::mbActive) mpViewer->UpdateAndDrawFrame();
 
         // If tracking were good, check if we insert a keyframe
         if(bOK)

@@ -175,7 +175,7 @@ void LocalMapping::RunServer()
             //cout <<"++++第 "<<(mpCurrentBundledKeyFrames->mId.first)<< " BundledKeyFrames 进入 runServer" <<endl;
 
             //Visualize
-            //mpViewer->DrawMap(mpMap);  //TODO Uncomment
+            mpViewer->DrawBMap(mpBMap); 
 
             // Check recent MapPoints
             MapPointCullingServer();

@@ -285,41 +285,41 @@ namespace cslam {
 
     void Viewer::RunClient()
     {
-        while(1)
-        {
-            if(this->CheckVisData())
-            {
-                unique_lock<mutex> lockVis(mMutexDrawMap);
+    //     while(1)
+    //     {
+    //         if(this->CheckVisData())
+    //         {
+    //             unique_lock<mutex> lockVis(mMutexDrawMap);
 
-                for(map<string,VisBundle>::iterator mit = mmVisData.begin();mit!=mmVisData.end();++mit)
-                {
-                    msCurFrame = mit->first;
-                    mCurVisBundle = mit->second;
+    //             for(map<string,VisBundle>::iterator mit = mmVisData.begin();mit!=mmVisData.end();++mit)
+    //             {
+    //                 msCurFrame = mit->first;
+    //                 mCurVisBundle = mit->second;
 
-                    if(params::vis::mbShowCovGraph)
-                        this->PubCovGraph();
+    //                 if(params::vis::mbShowCovGraph)
+    //                     this->PubCovGraph();
 
-                    if(params::vis::mbShowKFs)
-                    {
-                        this->ClearMarkers(mCurVisBundle.mNativeId);
+    //                 if(params::vis::mbShowKFs)
+    //                 {
+    //                     this->ClearMarkers(mCurVisBundle.mNativeId);
 
-                        this->PubKeyFramesAsFrusta();
-                    }
+    //                     this->PubKeyFramesAsFrusta();
+    //                 }
 
-                    if(params::vis::mbShowTraj)
-                        this->PubTrajectories();
+    //                 if(params::vis::mbShowTraj)
+    //                     this->PubTrajectories();
 
-                    if(params::vis::mbShowMPs)
-                        this->PubMapPointsAsCloud();
-                }
-                mmVisData.clear();
-            }
+    //                 if(params::vis::mbShowMPs)
+    //                     this->PubMapPointsAsCloud();
+    //             }
+    //             mmVisData.clear();
+    //         }
 
-            this->ResetIfRequested();
+    //         this->ResetIfRequested();
 
-            usleep(params::timings::client::miViewerRate);
-        }
-    }
+    //         usleep(params::timings::client::miViewerRate);
+    //     }
+     }
 
     void Viewer::RunServer()
     {
@@ -328,7 +328,6 @@ namespace cslam {
             if(this->CheckVisData())
             {
                 unique_lock<mutex> lockVis(mMutexDrawMap);
-
                 for(map<string,VisBundle>::iterator mit = mmVisData.begin();mit!=mmVisData.end();++mit)
                 {
                     msCurFrame = mit->first;
@@ -343,13 +342,10 @@ namespace cslam {
                     if(params::vis::mbShowKFs)
                     {
                         this->ClearMarkers(mCurVisBundle.mNativeId);
-
                         this->PubKeyFramesAsFrusta();
                     }
-
                     if(params::vis::mbShowTraj)
                         this->PubTrajectories();
-
                     if(params::vis::mbShowMPs)
                     {
                         this->PubMapPointsAsCloud();
@@ -447,126 +443,126 @@ namespace cslam {
 
     void Viewer::UpdateFrame()
     {
-        unique_lock<mutex> lock(mMutexFrameDraw);
-        mvCurrentKeys=mpTracker->mCurrentFrame->mvKeys;
-        N = mvCurrentKeys.size();
-        mvbVO = vector<bool>(N,false);
-        mvbMap = vector<bool>(N,false);
-        mbOnlyTracking = false;
+        // unique_lock<mutex> lock(mMutexFrameDraw);
+        // mvCurrentKeys=mpTracker->mCurrentFrame->mvKeysMultiple[0];
+        // N = mCurrentFrame->mvCurrentKeys.size();
+        // mvbVO = vector<bool>(N,false);
+        // mvbMap = vector<bool>(N,false);
+        // mbOnlyTracking = false;
 
-        if(mpTracker->mLastProcessedState==Tracking::NOT_INITIALIZED)
-        {
-            mvIniKeys=mpTracker->mInitialFrame->mvKeys;
-            mvIniMatches=mpTracker->mvIniMatches;
-        }
-        else if(mpTracker->mLastProcessedState==Tracking::OK)
-        {
-            for(int i=0;i<N;i++)
-            {
-                mpptr pMP = mpTracker->mCurrentFrame->mvpMapPoints[i];
-                if(pMP)
-                {
-                    if(!mpTracker->mCurrentFrame->mvbOutlier[i])
-                    {
-                        if(pMP->Observations()>0)
-                            mvbMap[i]=true;
-                        else
-                            mvbVO[i]=true;
-                    }
-                }
-            }
-        }
-        mState=static_cast<int>(mpTracker->mLastProcessedState);
+        // if(mpTracker->mLastProcessedState==Tracking::NOT_INITIALIZED)
+        // {
+        //     mvIniKeys=mpTracker->mInitialFrame->mvKeys;
+        //     mvIniMatches=mpTracker->mvIniMatches;
+        // }
+        // else if(mpTracker->mLastProcessedState==Tracking::OK)
+        // {
+        //     for(int i=0;i<N;i++)
+        //     {
+        //         mpptr pMP = mpTracker->mCurrentFrame->mvpMapPoints[i];
+        //         if(pMP)
+        //         {
+        //             if(!mpTracker->mCurrentFrame->mvbOutlier[i])
+        //             {
+        //                 if(pMP->Observations()>0)
+        //                     mvbMap[i]=true;
+        //                 else
+        //                     mvbVO[i]=true;
+        //             }
+        //         }
+        //     }
+        // }
+        // mState=static_cast<int>(mpTracker->mLastProcessedState);
     }
 
     cv::Mat Viewer::DrawFrame()
     {
-        cv::Mat im;
-        vector<cv::KeyPoint> vIniKeys; // Initialization: KeyPoints in reference frame
-        vector<int> vMatches; // Initialization: correspondeces with reference keypoints
-        vector<cv::KeyPoint> vCurrentKeys; // KeyPoints in current frame
-        vector<bool> vbVO, vbMap; // Tracked MapPoints in current frame
-        int state; // Tracking state
+        // cv::Mat im;
+        // vector<cv::KeyPoint> vIniKeys; // Initialization: KeyPoints in reference frame
+        // vector<int> vMatches; // Initialization: correspondeces with reference keypoints
+        // vector<cv::KeyPoint> vCurrentKeys; // KeyPoints in current frame
+        // vector<bool> vbVO, vbMap; // Tracked MapPoints in current frame
+        // int state; // Tracking state
 
-        //Copy variables within scoped mutex
-        {
-            unique_lock<mutex> lock(mMutexFrameDraw);
-            state=mState;
-            if(mState==Tracking::SYSTEM_NOT_READY)
-                mState=Tracking::NO_IMAGES_YET;
+        // //Copy variables within scoped mutex
+        // {
+        //     unique_lock<mutex> lock(mMutexFrameDraw);
+        //     state=mState;
+        //     if(mState==Tracking::SYSTEM_NOT_READY)
+        //         mState=Tracking::NO_IMAGES_YET;
 
-            mIm.copyTo(im);
+        //     mIm.copyTo(im);
 
-            if(mState==Tracking::NOT_INITIALIZED)
-            {
-                vCurrentKeys = mvCurrentKeys;
-                vIniKeys = mvIniKeys;
-                vMatches = mvIniMatches;
-            }
-            else if(mState==Tracking::OK)
-            {
-                vCurrentKeys = mvCurrentKeys;
-                vbVO = mvbVO;
-                vbMap = mvbMap;
-            }
-            else if(mState==Tracking::LOST)
-            {
-                vCurrentKeys = mvCurrentKeys;
-            }
-        } // destroy scoped mutex -> release mutex
+        //     if(mState==Tracking::NOT_INITIALIZED)
+        //     {
+        //         vCurrentKeys = mvCurrentKeys;
+        //         vIniKeys = mvIniKeys;
+        //         vMatches = mvIniMatches;
+        //     }
+        //     else if(mState==Tracking::OK)
+        //     {
+        //         vCurrentKeys = mvCurrentKeys;
+        //         vbVO = mvbVO;
+        //         vbMap = mvbMap;
+        //     }
+        //     else if(mState==Tracking::LOST)
+        //     {
+        //         vCurrentKeys = mvCurrentKeys;
+        //     }
+        // } // destroy scoped mutex -> release mutex
 
-        if(im.channels()<3) //this should be always true
-            cvtColor(im,im,CV_GRAY2BGR);
+        // if(im.channels()<3) //this should be always true
+        //     cvtColor(im,im,CV_GRAY2BGR);
 
-        //Draw
-        if(state==Tracking::NOT_INITIALIZED) //INITIALIZING
-        {
-            for(unsigned int i=0; i<vMatches.size(); i++)
-            {
-                if(vMatches[i]>=0)
-                {
-                    cv::line(im,vIniKeys[i].pt,vCurrentKeys[vMatches[i]].pt,
-                             cv::Scalar(FEATCOL));
-                }
-            }
-        }
-        else if(state==Tracking::OK) //TRACKING
-        {
-            mnTracked=0;
-            mnTrackedVO=0;
-            const float r = 5;
-            for(int i=0;i<N;i++)
-            {
-                if(vbVO[i] || vbMap[i])
-                {
-                    cv::Point2f pt1,pt2;
-                    pt1.x=vCurrentKeys[i].pt.x-r;
-                    pt1.y=vCurrentKeys[i].pt.y-r;
-                    pt2.x=vCurrentKeys[i].pt.x+r;
-                    pt2.y=vCurrentKeys[i].pt.y+r;
+        // //Draw
+        // if(state==Tracking::NOT_INITIALIZED) //INITIALIZING
+        // {
+        //     for(unsigned int i=0; i<vMatches.size(); i++)
+        //     {
+        //         if(vMatches[i]>=0)
+        //         {
+        //             cv::line(im,vIniKeys[i].pt,vCurrentKeys[vMatches[i]].pt,
+        //                      cv::Scalar(FEATCOL));
+        //         }
+        //     }
+        // }
+        // else if(state==Tracking::OK) //TRACKING
+        // {
+        //     mnTracked=0;
+        //     mnTrackedVO=0;
+        //     const float r = 5;
+        //     for(int i=0;i<N;i++)
+        //     {
+        //         if(vbVO[i] || vbMap[i])
+        //         {
+        //             cv::Point2f pt1,pt2;
+        //             pt1.x=vCurrentKeys[i].pt.x-r;
+        //             pt1.y=vCurrentKeys[i].pt.y-r;
+        //             pt2.x=vCurrentKeys[i].pt.x+r;
+        //             pt2.y=vCurrentKeys[i].pt.y+r;
 
-                    // This is a match to a MapPoint in the map
-                    if(vbMap[i])
-                    {
-                        cv::rectangle(im,pt1,pt2,cv::Scalar(FEATCOL));
-                        cv::circle(im,vCurrentKeys[i].pt,2,cv::Scalar(FEATCOL),-1);
+        //             // This is a match to a MapPoint in the map
+        //             if(vbMap[i])
+        //             {
+        //                 cv::rectangle(im,pt1,pt2,cv::Scalar(FEATCOL));
+        //                 cv::circle(im,vCurrentKeys[i].pt,2,cv::Scalar(FEATCOL),-1);
 
-                        mnTracked++;
-                    }
-                    else // This is match to a "visual odometry" MapPoint created in the last frame
-                    {
-                        cv::circle(im,vCurrentKeys[i].pt,7,cv::Scalar(0,0,255),1);
-                        cv::circle(im,vCurrentKeys[i].pt,2,cv::Scalar(0,0,255),-1);
-                        mnTrackedVO++;
-                    }
-                }
-            }
-        }
+        //                 mnTracked++;
+        //             }
+        //             else // This is match to a "visual odometry" MapPoint created in the last frame
+        //             {
+        //                 cv::circle(im,vCurrentKeys[i].pt,7,cv::Scalar(0,0,255),1);
+        //                 cv::circle(im,vCurrentKeys[i].pt,2,cv::Scalar(0,0,255),-1);
+        //                 mnTrackedVO++;
+        //             }
+        //         }
+        //     }
+        // }
 
-        cv::Mat imWithInfo;
-        DrawTextInfo(im,state,imWithInfo);
+        // cv::Mat imWithInfo;
+        // DrawTextInfo(im,state,imWithInfo);
 
-        return imWithInfo;
+        // return imWithInfo;
     }
 
     void Viewer::DrawTextInfo(cv::Mat &im, int nState, cv::Mat &imText)
@@ -610,18 +606,18 @@ namespace cslam {
         }
     }
 
-    void Viewer::DrawMap(mapptr pMap)
+    void Viewer::DrawBMap(bmapptr pBMap)
     {
-        if(!pMap) return;
+        if(!pBMap) return;
 
         unique_lock<mutex> lock(mMutexDrawMap);
 
         VisBundle VB;
-        VB.mmpKFs = pMap->GetMmpKeyFrames();
-        VB.mmpMPs = pMap->GetMmpMapPoints();
-        VB.mNativeId = pMap->mMapId;
-        VB.mMaxKfId = pMap->GetMaxKFid();
-        VB.mMaxKfIdUnique = pMap->GetMaxKFidUnique();
+        VB.mmpBKFs = pBMap->GetMmpBundledKeyFrames();
+        VB.mmpMPs = pBMap->GetMmpMapPoints();
+        VB.mNativeId = pBMap->mBMapId;
+        VB.mMaxBKfId = pBMap->GetMaxBKFid();
+        VB.mMaxBKfIdUnique = pBMap->GetMaxBKFidUnique();
 
         if(mpCC->mSysState == eSystemState::SERVER)
         {
@@ -629,20 +625,20 @@ namespace cslam {
             for(int it=0;it<4;++it)
                 vMaxids.push_back(make_pair(KFRANGE,it));
 
-            for(map<idpair,kfptr>::iterator mit = VB.mmpKFs.begin();mit!=VB.mmpKFs.end();++mit)
+            for(map<idpair,bkfptr>::iterator mit = VB.mmpBKFs.begin();mit!=VB.mmpBKFs.end();++mit)
             {
-                kfptr pKFi = mit->second;
+                bkfptr pBKFi = mit->second;
 
-                if(!pKFi || pKFi->isBad())
+                if(!pBKFi || pBKFi->isBad())
                     continue;
 
-                idpair maxpair = vMaxids[pKFi->mId.second];
+                idpair maxpair = vMaxids[pBKFi->mId.second];
                 if(maxpair.first == KFRANGE)
-                    vMaxids[pKFi->mId.second] = pKFi->mId;
+                    vMaxids[pBKFi->mId.second] = pBKFi->mId;
                 else
                 {
-                    if(pKFi->mId.first > maxpair.first)
-                        vMaxids[pKFi->mId.second] = pKFi->mId;
+                    if(pBKFi->mId.first > maxpair.first)
+                        vMaxids[pBKFi->mId.second] = pBKFi->mId;
                 }
             }
 
@@ -650,11 +646,11 @@ namespace cslam {
             {
                 idpair maxpair = vMaxids[it];
                 if(maxpair.first != KFRANGE)
-                    VB.msCurKFIds.insert(maxpair);
+                    VB.msCurBKFIds.insert(maxpair);
             }
         }
 
-        mmVisData[pMap->mOdomFrame] = VB;
+        mmVisData[pBMap->mOdomFrame] = VB;
     }
 
     void Viewer::PubKeyFramesAsFrusta()
@@ -749,13 +745,13 @@ namespace cslam {
         const float fScale = static_cast<float>(params::vis::mfScaleFactor);
         const float d = static_cast<float>(params::vis::mfCamSize);
 
-        for(map<idpair,kfptr>::iterator mit = mCurVisBundle.mmpKFs.begin();mit!=mCurVisBundle.mmpKFs.end();++mit)
+        for(map<idpair,bkfptr>::iterator mit = mCurVisBundle.mmpBKFs.begin();mit!=mCurVisBundle.mmpBKFs.end();++mit)
         {
-            kfptr pKFi = mit->second;
+            bkfptr pBKFi = mit->second;
 
-            if((pKFi->IsEmpty()) || (pKFi->isBad())) continue;
+            if((pBKFi->IsEmpty()) || (pBKFi->isBad())) continue;
 
-            size_t ClientId = pKFi->mId.second;
+            size_t ClientId = pBKFi->mId.second;
 
             //Camera is a pyramid. Define in camera coordinate system
             cv::Mat o = (cv::Mat_<float>(4,1) << 0, 0, 0, 1);
@@ -764,7 +760,7 @@ namespace cslam {
             cv::Mat p3 = (cv::Mat_<float>(4,1) << -d, -d*0.8, d*0.5, 1);
             cv::Mat p4 = (cv::Mat_<float>(4,1) << -d, d*0.8, d*0.5, 1);
 
-            if(mpCC->mSysState == eSystemState::SERVER && mCurVisBundle.msCurKFIds.count(pKFi->mId))
+            if(mpCC->mSysState == eSystemState::SERVER && mCurVisBundle.msCurBKFIds.count(pBKFi->mId))
             {
                 //double size for current KFs
                 //for clients, this is done by PubFramePoseAsFrustum
@@ -775,8 +771,8 @@ namespace cslam {
                 p4 = (cv::Mat_<float>(4,1) << -MUL*d, MUL*d*0.8, MUL*d*0.5, 1);
             }
 
-            cv::Mat Twc = pKFi->GetPoseInverse();
-            cv::Mat ow = pKFi->GetCameraCenter();
+            cv::Mat Twc = pBKFi->GetPoseInverse();
+            cv::Mat ow = pBKFi->GetCameraCenter(0);
             cv::Mat p1w = Twc*p1;
             cv::Mat p2w = Twc*p2;
             cv::Mat p3w = Twc*p3;
@@ -799,7 +795,7 @@ namespace cslam {
             msgs_p4.y=(fScale)*p4w.at<float>(1);
             msgs_p4.z=(fScale)*p4w.at<float>(2);
 
-            if(mpCC->mSysState == eSystemState::SERVER && mCurVisBundle.msCurKFIds.count(pKFi->mId))
+            if(mpCC->mSysState == eSystemState::SERVER && mCurVisBundle.msCurBKFIds.count(pBKFi->mId))
             {
                 //hits on server
                 visualization_msgs::Marker KeyFrames;
@@ -808,7 +804,7 @@ namespace cslam {
                 KeyFrames.header.stamp = ros::Time::now();
 
                 ss = new stringstream;
-                *ss << mSysType << "CurKf" << pKFi->mId.second << "Map" << mCurVisBundle.mNativeId;
+                *ss << mSysType << "CurKf" << pBKFi->mId.second << "Map" << mCurVisBundle.mNativeId;
                 KeyFrames.ns = ss->str();
 
                 KeyFrames.id=0;
@@ -817,19 +813,19 @@ namespace cslam {
                 KeyFrames.pose.orientation.w=1.0;
                 KeyFrames.action=visualization_msgs::Marker::ADD;
 
-                if(pKFi->mId.second == 0)
+                if(pBKFi->mId.second == 0)
                 {
                     KeyFrames.color = params::colors::mc0.mColMsg;
                 }
-                else if(pKFi->mId.second == 1)
+                else if(pBKFi->mId.second == 1)
                 {
                     KeyFrames.color = params::colors::mc1.mColMsg;
                 }
-                else if(pKFi->mId.second == 2)
+                else if(pBKFi->mId.second == 2)
                 {
                     KeyFrames.color = params::colors::mc2.mColMsg;
                 }
-                else if(pKFi->mId.second == 3)
+                else if(pBKFi->mId.second == 3)
                 {
                     KeyFrames.color = params::colors::mc3.mColMsg;
                 }
@@ -854,7 +850,7 @@ namespace cslam {
 
                 vMsgs.push_back(KeyFrames);
             }
-            else if(mpCC->mSysState == eSystemState::CLIENT && (pKFi->mbFromServer || pKFi->mbUpdatedByServer))
+            else if(mpCC->mSysState == eSystemState::CLIENT && (pBKFi->mbFromServer || pBKFi->mbUpdatedByServer))
             {
                 vMsgs[5].points.push_back(msgs_o);
                 vMsgs[5].points.push_back(msgs_p1);
@@ -1038,22 +1034,21 @@ namespace cslam {
 
     void Viewer::PubTrajectories()
     {
-        vector<vector<kfptr>> vvTraj;
+        vector<vector<bkfptr>> vvTraj;
         vector<size_t> vMaxId = vector<size_t>(4,0);
+        vvTraj.resize(4,vector<bkfptr>(mCurVisBundle.mMaxBKfId+1,nullptr));
 
-        vvTraj.resize(4,vector<kfptr>(mCurVisBundle.mMaxKfId+1,nullptr));
-
-        for(map<idpair,kfptr>::iterator mit = mCurVisBundle.mmpKFs.begin();mit!=mCurVisBundle.mmpKFs.end();++mit)
+        for(map<idpair,bkfptr>::iterator mit = mCurVisBundle.mmpBKFs.begin();mit!=mCurVisBundle.mmpBKFs.end();++mit)
         {
-            kfptr pKFi = mit->second;
+            bkfptr pBKFi = mit->second;
 
-            if((pKFi->IsEmpty()) || (pKFi->isBad())) continue;
+            if((pBKFi->IsEmpty()) || (pBKFi->isBad())) continue;
 
-            size_t ClientId = pKFi->mId.second;
+            size_t ClientId = pBKFi->mId.second;
 
-            if(pKFi->mId.first > mCurVisBundle.mMaxKfId)
+            if(pBKFi->mId.first > mCurVisBundle.mMaxBKfId)
             {
-                cout << "\033[1;33m!!! WARN !!!\033[0m" << __func__ << __LINE__ << ": pKFi->mId.first > miMaxKFid" << endl;
+                cout << "\033[1;33m!!! WARN !!!\033[0m" << __func__ << __LINE__ << ": pBKFi->mId.first > miMaxBKFid" << endl;
                 continue;
             }
 
@@ -1063,9 +1058,9 @@ namespace cslam {
                     continue;
             }
 
-            vvTraj[ClientId][pKFi->mId.first] = pKFi;
-            if(vMaxId[ClientId] < pKFi->mId.first)
-                vMaxId[ClientId] = pKFi->mId.first;
+            vvTraj[ClientId][pBKFi->mId.first] = pBKFi;
+            if(vMaxId[ClientId] < pBKFi->mId.first)
+                vMaxId[ClientId] = pBKFi->mId.first;
         }
 
         vector<visualization_msgs::Marker> vMsgs;
@@ -1112,7 +1107,7 @@ namespace cslam {
 
         for(int ito = 0;ito<4;++ito)
         {
-            vector<kfptr> vTraj = vvTraj[ito];
+            vector<bkfptr> vTraj = vvTraj[ito];
 
             if(vTraj.empty())
                 continue;
@@ -1122,15 +1117,15 @@ namespace cslam {
 
             for(int iti = 0;iti<=vMaxId[ito];++iti)
             {
-                kfptr pKFi = vTraj[iti];
+                bkfptr pBKFi = vTraj[iti];
 
-                if(!pKFi)
+                if(!pBKFi)
                     continue;
 
-                if(pKFi->mbFromServer)
+                if(pBKFi->mbFromServer)
                     continue;
 
-                cv::Mat T = pKFi->GetPoseInverse();
+                cv::Mat T = pBKFi->GetPoseInverse();
 
                 geometry_msgs::Point p;
 
@@ -1155,7 +1150,7 @@ namespace cslam {
                     if(iti==vMaxId[ito])
                     {
                         // 输出到磁盘文件
-                        fout_traj << setprecision(18)<< pKFi->mTimeStamp <<" ";
+                        fout_traj << setprecision(18)<< pBKFi->mTimeStamp <<" ";
                         fout_traj << p.x<<" ";
                         fout_traj << p.y<<" ";
                         fout_traj << p.z<<" ";
@@ -1172,12 +1167,12 @@ namespace cslam {
 
 
 
-                if(pKFi->mId.first == 0)
+                if(pBKFi->mId.first == 0)
                 {
                     p0 = p;
                     bP0 = true;
                 }
-                else if(pKFi->mId.first == 1 && bP0)
+                else if(pBKFi->mId.first == 1 && bP0)
                 {
 
                     vMsgs[ito].points.push_back(p0);
@@ -1214,7 +1209,7 @@ namespace cslam {
 
     void Viewer::PubCovGraph()
     {
-        if(mCurVisBundle.mmpKFs.size() < 5) return;
+        if(mCurVisBundle.mmpBKFs.size() < 5) return;
 
         visualization_msgs::Marker CovGraphMsg;
         visualization_msgs::Marker SharedEdgeMsg;
@@ -1245,65 +1240,65 @@ namespace cslam {
         size_t MaxVal;
 
         if(mpCC->mSysState == eSystemState::CLIENT)
-            MaxVal = 2*max(mCurVisBundle.mMaxKfId,mCurVisBundle.mmpKFs.size())+1; //num of KFs is not necessarily equal to highest ID
+            MaxVal = 2*max(mCurVisBundle.mMaxBKfId,mCurVisBundle.mmpBKFs.size())+1; //num of KFs is not necessarily equal to highest ID
         else
-            MaxVal = 2*mCurVisBundle.mMaxKfIdUnique + 1; //sometimes for client, KF is not already entered in map --> KF->mUniqueId > mnMaxKFidUnique
+            MaxVal = 2*mCurVisBundle.mMaxBKfIdUnique + 1; //sometimes for client, KF is not already entered in map --> KF->mUniqueId > mnMaxKFidUnique
 
         vector<vector<bool>> CovMat(MaxVal,vector<bool>(MaxVal,false));
 
-        size_t ConId=KFRANGE,KfId=KFRANGE;
+        size_t ConId=KFRANGE,BKfId=KFRANGE;
         size_t count = 0;
 
         float fScale = static_cast<float>(params::vis::mfScaleFactor);
 
-        for(map<idpair,kfptr>::iterator mit = mCurVisBundle.mmpKFs.begin();mit!=mCurVisBundle.mmpKFs.end();++mit)
+        for(map<idpair,bkfptr>::iterator mit = mCurVisBundle.mmpBKFs.begin();mit!=mCurVisBundle.mmpBKFs.end();++mit)
         {
-            kfptr pKFi = mit->second;
+            bkfptr pBKFi = mit->second;
 
-            if((pKFi->IsEmpty()) || (pKFi->isBad())) continue;
+            if((pBKFi->IsEmpty()) || (pBKFi->isBad())) continue;
 
-            vector<kfptr> vConKFs = pKFi->GetCovisiblesByWeight(params::vis::miCovGraphMinFeats);
-            set<kfptr> sConKFs;
-            sConKFs.insert(vConKFs.begin(),vConKFs.end());
+            vector<bkfptr> vConBKFs = pBKFi->GetCovisiblesByWeight(params::vis::miCovGraphMinFeats);
+            set<bkfptr> sConBKFs;
+            sConBKFs.insert(vConBKFs.begin(),vConBKFs.end());
 
-            for(set<kfptr>::iterator sit=sConKFs.begin();sit!=sConKFs.end();++sit)
+            for(set<bkfptr>::iterator sit=sConBKFs.begin();sit!=sConBKFs.end();++sit)
             {
-                kfptr pKFcon = *sit;
-                if(pKFcon->isBad()) continue;
+                bkfptr pBKFcon = *sit;
+                if(pBKFcon->isBad()) continue;
 
                 if(mpCC->mSysState == eSystemState::CLIENT)
                 {
-                    if(!mpMap->GetKfPtr(pKFcon->mId.first,pKFcon->mId.second) || !mpMap->GetKfPtr(pKFi->mId.first,pKFi->mId.second))
+                    if(!mpBMap->GetBKfsPtr(pBKFcon->mId.first,pBKFcon->mId.second) || !mpBMap->GetBKfsPtr(pBKFi->mId.first,pBKFi->mId.second))
                         continue;
                 }
 
                 if(mpCC->mSysState == eSystemState::CLIENT)
                 {
-                    if(pKFi->mVisId == -1) pKFi->mVisId = count++;
-                    if(pKFcon->mVisId == -1) pKFcon->mVisId = count++;
+                    if(pBKFi->mVisId == -1) pBKFi->mVisId = count++;
+                    if(pBKFcon->mVisId == -1) pBKFcon->mVisId = count++;
 
-                    KfId = pKFi->mVisId;
-                    ConId = pKFcon->mVisId;
+                    BKfId = pBKFi->mVisId;
+                    ConId = pBKFcon->mVisId;
                 }
                 else if(mpCC->mSysState == eSystemState::SERVER)
                 {
-                    KfId = pKFi->mUniqueId;
-                    ConId = pKFcon->mUniqueId;
+                    BKfId = pBKFi->mUniqueId;
+                    ConId = pBKFcon->mUniqueId;
                 }
 
-                if(max(KfId,ConId) > (MaxVal-1)) //starts with 0 -> CovMat[MaxVal][MaxVal] does not exist. Yet, this should not happen...
+                if(max(BKfId,ConId) > (MaxVal-1)) //starts with 0 -> CovMat[MaxVal][MaxVal] does not exist. Yet, this should not happen...
                 {
                     cout << "\033[1;31m!!!!! ERROR !!!!!\033[0m  Map::GetCovGraphAsMarkerMsg(...): KF ID out of bounds" << endl;
                     cout << "MaxVal: " << MaxVal << endl;
-                    cout << "pKFi->Id: " << pKFi->mId.first << "|" << pKFi->mId.second << "|" << pKFi->mUniqueId << endl;
-                    cout << "pKFcon->Id: " << pKFcon->mId.first << "|" << pKFcon->mId.second << "|" << pKFcon->mUniqueId << endl;
+                    cout << "pBKFi->Id: " << pBKFi->mId.first << "|" << pBKFi->mId.second << "|" << pBKFi->mUniqueId << endl;
+                    cout << "pBKFcon->Id: " << pBKFcon->mId.first << "|" << pBKFcon->mId.second << "|" << pBKFcon->mUniqueId << endl;
                     continue;
                 }
 
-                if(CovMat[KfId][ConId]==true || CovMat[ConId][KfId]==true) continue;
+                if(CovMat[BKfId][ConId]==true || CovMat[ConId][BKfId]==true) continue;
 
-                cv::Mat T1 = pKFi->GetPoseInverse();
-                cv::Mat T2 = pKFcon->GetPoseInverse();
+                cv::Mat T1 = pBKFi->GetPoseInverse();
+                cv::Mat T2 = pBKFcon->GetPoseInverse();
 
                 geometry_msgs::Point p1;
                 geometry_msgs::Point p2;
@@ -1316,7 +1311,7 @@ namespace cslam {
                 p2.y = fScale*((double)(T2.at<float>(1,3)));
                 p2.z = fScale*((double)(T2.at<float>(2,3)));
 
-                if(pKFi->mId.second == pKFcon->mId.second)
+                if(pBKFi->mId.second == pBKFcon->mId.second)
                 {
                     CovGraphMsg.points.push_back(p1);
                     CovGraphMsg.points.push_back(p2);
@@ -1327,30 +1322,30 @@ namespace cslam {
                     SharedEdgeMsg.points.push_back(p2);
                 }
 
-                CovMat[KfId][ConId]=true;
-                CovMat[ConId][KfId]=true;
+                CovMat[BKfId][ConId]=true;
+                CovMat[ConId][BKfId]=true;
             }
         }
 
         if(mpCC->mSysState == eSystemState::CLIENT)
         {
             //reset pKF->mVisId
-            for(map<idpair,kfptr>::iterator mit = mCurVisBundle.mmpKFs.begin();mit!=mCurVisBundle.mmpKFs.end();++mit)
+            for(map<idpair,bkfptr>::iterator mit = mCurVisBundle.mmpBKFs.begin();mit!=mCurVisBundle.mmpBKFs.end();++mit)
             {
-                kfptr pKFi = mit->second;
+                bkfptr pBKFi = mit->second;
 
-                if((pKFi->IsEmpty()) || (pKFi->isBad())) continue;
+                if((pBKFi->IsEmpty()) || (pBKFi->isBad())) continue;
 
-                if(pKFi->mVisId != -1) pKFi->mVisId = -1;
+                if(pBKFi->mVisId != -1) pBKFi->mVisId = -1;
 
-                set<kfptr> sConKFs = pKFi->GetConnectedKeyFrames();
+                set<bkfptr> sConBKFs = pBKFi->GetConnectedBundledKeyFrames();
 
-                for(set<kfptr>::iterator sit=sConKFs.begin();sit!=sConKFs.end();++sit)
+                for(set<bkfptr>::iterator sit=sConBKFs.begin();sit!=sConBKFs.end();++sit)
                 {
-                    kfptr pKFcon = *sit;
-                    if(pKFcon->isBad()) continue;
+                    bkfptr pBKFcon = *sit;
+                    if(pBKFcon->isBad()) continue;
 
-                    if(pKFcon->mVisId != -1) pKFcon->mVisId = -1;
+                    if(pBKFcon->mVisId != -1) pBKFcon->mVisId = -1;
                 }
             }
         }

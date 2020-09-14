@@ -439,7 +439,7 @@ void ClientHandler::InitializeClient()
     //Should no do that before, a fast system might already use a pointe before it was set -> segfault
     mptMapping.reset(new thread(&LocalMapping::RunClient,mpMapping));//todo uncomment
     mptComm.reset(new thread(&Communicator::RunClient,mpComm));  //todo uncomment
-    mptViewer.reset(new thread(&Viewer::RunClient,mpViewer));  //do not forget to uncomment
+    //mptViewer.reset(new thread(&Viewer::RunClient,mpViewer));  //do not forget to uncomment
     //todo
 	// if (mClientId == 0)
     // {

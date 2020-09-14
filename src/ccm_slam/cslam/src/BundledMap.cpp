@@ -3,7 +3,7 @@
 namespace cslam {
 
 BundledMap::BundledMap(ros::NodeHandle Nh, ros::NodeHandle NhPrivate, size_t BMapId, eSystemState SysState)
-    :  mnMaxMPid(0),
+    :  mnMaxBKFsid(0),mnMaxMPid(0),
       mnMaxBKFsidUnique(0),mnMaxMPidUnique(0),
       mNh(Nh), mNhPrivate(NhPrivate),
       mBMapId(BMapId),mbOutdated(false),

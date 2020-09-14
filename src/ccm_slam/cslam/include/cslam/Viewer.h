@@ -82,15 +82,26 @@ public:
     typedef boost::shared_ptr<BundledKeyFrames> bkfptr;
     typedef boost::shared_ptr<CentralControl> ccptr;
 
+    // struct VisBundle
+    // {
+    //     map<idpair,kfptr> mmpKFs;
+    //     map<idpair,mpptr> mmpMPs;
+    //     size_t mNativeId;
+    //     size_t mMaxKfId;
+    //     size_t mMaxKfIdUnique;
+    //     set<idpair> msCurKFIds;
+    // };
+
     struct VisBundle
     {
-        map<idpair,kfptr> mmpKFs;
+        map<idpair,bkfptr> mmpBKFs;
         map<idpair,mpptr> mmpMPs;
         size_t mNativeId;
-        size_t mMaxKfId;
-        size_t mMaxKfIdUnique;
-        set<idpair> msCurKFIds;
+        size_t mMaxBKfId;
+        size_t mMaxBKfIdUnique;
+        set<idpair> msCurBKFIds;
     };
+
 
 public:
     //Viewer(mapptr pMap, ccptr pCC);
@@ -107,7 +118,7 @@ public:
     void UpdateAndDrawFrame();
 
     //Map Drawing
-    void DrawMap(mapptr pMap);
+    //void DrawMap(mapptr pMap);
 
     void DrawBMap(bmapptr pBMap);
     //Clearing
@@ -144,6 +155,7 @@ private:
     cv::Mat mIm;
     std::vector<mpptr> mvpFrameMPs;
     int N;
+
     vector<cv::KeyPoint> mvCurrentKeys;
     vector<bool> mvbMap, mvbVO;
     bool mbOnlyTracking;
